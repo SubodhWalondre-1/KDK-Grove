@@ -18,7 +18,7 @@ from src.core.constants import (
     TREND_SPARKLINE_MAX_POINTS,
     TREND_STABLE_THRESHOLD,
 )
-from src.core.severity import get_status_color
+from src.core.severity import calculate_health_score, get_status_color
 from src.models.report import Report, ReportTestValue
 from src.models.trend_insight import TrendInsight
 from src.schemas.trend import (
@@ -184,7 +184,16 @@ def get_trend_overview(db: Session, profile_id: int) -> TrendOverviewResponse:
         .all()
     )
 
-    scores_over_time = [r.health_score for r in completed_reports]
+    scores_over_time = []
+    for r in completed_reports:
+        hs = r.health_score
+        if (hs is None or hs == 0.0) and r.test_values:
+            computed = calculate_health_score(r.test_values)
+            if computed is not None and computed > 0:
+                hs = computed
+                r.health_score = computed
+        scores_over_time.append(hs)
+
     hs_trend_res = calculate_health_score_trend(scores_over_time)
 
     sparkline_scores = (
@@ -192,12 +201,14 @@ def get_trend_overview(db: Session, profile_id: int) -> TrendOverviewResponse:
         if scores_over_time
         else []
     )
-    valid_scores_count = len([s for s in scores_over_time if s is not None])
+    valid_scores = [s for s in scores_over_time if s is not None and s > 0]
+    valid_scores_count = len(valid_scores)
+    latest_score_val = valid_scores[-1] if valid_scores else (scores_over_time[-1] if scores_over_time else None)
 
     hs_summary = HealthScoreTrendSummary(
         sparkline=sparkline_scores,
         direction=hs_trend_res["direction"],
-        latest_score=scores_over_time[-1] if scores_over_time else None,
+        latest_score=latest_score_val,
         based_on_report_count=valid_scores_count,
     )
 

@@ -77,11 +77,21 @@ def calculate_health_score(test_values: list) -> float | None:
         value = tv.value if hasattr(tv, "value") else tv.get("value")
         ref_low = tv.ref_low if hasattr(tv, "ref_low") else tv.get("ref_low")
         ref_high = tv.ref_high if hasattr(tv, "ref_high") else tv.get("ref_high")
+        status = tv.status if hasattr(tv, "status") else tv.get("status")
 
         if value is None:
             continue
 
         severity = calculate_deviation_severity(value, ref_low, ref_high)
+        if severity is None and status:
+            s = str(status).lower()
+            if s in ("green", "normal", "optimal"):
+                severity = 0.0
+            elif s in ("yellow", "borderline", "moderate"):
+                severity = SEVERITY_PENALTY_BORDERLINE
+            elif s in ("red", "abnormal", "critical", "severe", "high", "low"):
+                severity = SEVERITY_PENALTY_SEVERE
+
         if severity is not None:
             penalties.append(severity)
 
