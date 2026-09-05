@@ -45,7 +45,11 @@ from src.features.species_support.router import router as species_router
 from src.features.recommendations.router import router as recommendations_router, root_router as recommendations_root_router
 from src.features.recommendations.diet_router import router as diet_router
 from src.features.trend_tracking.router import router as trend_router
-from src.features.secure_sharing.router import owner_router as share_owner_router, public_router as share_public_router
+from src.features.secure_sharing.router import (
+    owner_router as share_owner_router,
+    public_router as share_public_router,
+    public_root_router as share_public_root_router,
+)
 from src.features.ai_explanations.router import router as explanations_router
 
 app.include_router(auth_router)
@@ -62,6 +66,7 @@ app.include_router(diet_router)
 app.include_router(trend_router)
 app.include_router(share_owner_router)
 app.include_router(share_public_router)
+app.include_router(share_public_root_router)
 app.include_router(explanations_router)
 
 

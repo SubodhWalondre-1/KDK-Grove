@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "change_me_to_a_secure_random_key_in_production"
     jwt_expiry_minutes: int = 1440
 
+    frontend_base_url: str = "http://localhost:5173"
+
     admin_api_key: str = "change_me_to_a_long_random_string"
 
     openrouter_api_key: str = ""

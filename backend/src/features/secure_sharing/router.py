@@ -17,6 +17,7 @@ from src.schemas.sharing import (
 
 owner_router = APIRouter(prefix="/api", tags=["secure-sharing"])
 public_router = APIRouter(prefix="/api/shared", tags=["public-sharing"])
+public_root_router = APIRouter(prefix="/shared", tags=["public-sharing"])
 
 
 def _extract_client_ip(request: Request) -> str:
@@ -38,22 +39,11 @@ def create_share_link(
     db: Session = Depends(get_db),
 ):
     """Create an active share link for a report owned by the authenticated user."""
-    link = sharing_service.create_share_link(
+    return sharing_service.create_share_link(
         db=db,
         report_id=report_id,
         user_id=current_user.id,
         expires_in_days=body.expires_in_days,
-    )
-    return ShareLinkResponse(
-        id=link.id,
-        token=link.token,
-        report_id=link.report_id,
-        status=link.status,
-        expires_at=link.expires_at,
-        view_count=link.view_count,
-        created_at=link.created_at,
-        unseen_count=0,
-        latest_access_at=None,
     )
 
 
@@ -75,8 +65,7 @@ def get_share_link_logs(
     db: Session = Depends(get_db),
 ):
     """Retrieve audit access logs for a share link and mark unseen logs as read."""
-    logs = sharing_service.get_share_link_logs(db, share_link_id, current_user.id)
-    return AccessLogListResponse(logs=logs)
+    return sharing_service.get_share_link_logs(db, share_link_id, current_user.id)
 
 
 @owner_router.post("/share-links/{share_link_id}/revoke", response_model=ShareLinkResponse)
@@ -86,23 +75,13 @@ def revoke_share_link(
     db: Session = Depends(get_db),
 ):
     """Revoke an active share link, blocking future guest access attempts."""
-    link = sharing_service.revoke_share_link(db, share_link_id, current_user.id)
-    return ShareLinkResponse(
-        id=link.id,
-        token=link.token,
-        report_id=link.report_id,
-        status=link.status,
-        expires_at=link.expires_at,
-        view_count=link.view_count,
-        created_at=link.created_at,
-        unseen_count=0,
-        latest_access_at=None,
-    )
+    return sharing_service.revoke_share_link(db, share_link_id, current_user.id)
 
 
 # --- PUBLIC GUEST ENDPOINTS (NO AUTH REQUIRED) ---
 
 @public_router.get("/{token}", response_model=SharedReportPreview)
+@public_root_router.get("/{token}", response_model=SharedReportPreview)
 def get_share_preview(
     token: str,
     db: Session = Depends(get_db),
@@ -112,6 +91,7 @@ def get_share_preview(
 
 
 @public_router.post("/{token}/access", response_model=SharedReportPayload)
+@public_root_router.post("/{token}/access", response_model=SharedReportPayload)
 def record_access_and_get_payload(
     token: str,
     request: Request,
@@ -129,3 +109,4 @@ def record_access_and_get_payload(
         ip_address=ip_address,
         user_agent=user_agent,
     )
+

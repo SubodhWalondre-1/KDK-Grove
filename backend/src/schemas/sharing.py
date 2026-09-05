@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -25,11 +25,16 @@ class CreateShareLinkRequest(BaseModel):
 class ShareLinkResponse(BaseModel):
     id: int
     token: str
+    share_url: str = ""
     report_id: int
-    status: str
-    expires_at: datetime
-    view_count: int
+    report_type: Optional[str] = None
+    profile_id: Optional[int] = None
+    profile_name: Optional[str] = None
     created_at: datetime
+    expires_at: datetime
+    status: str
+    view_count: int = 0
+    is_expired: bool = False
     unseen_count: int = 0
     latest_access_at: Optional[datetime] = None
 
@@ -41,9 +46,14 @@ class ShareLinkListResponse(BaseModel):
 
 
 class SharedReportPreview(BaseModel):
-    valid: bool
-    report_type: Optional[str] = None
+    valid: bool = True
+    profile_name: Optional[str] = None
+    species: Optional[str] = None
     species_category: Optional[str] = None
+    report_type: Optional[str] = None
+    report_date: Optional[date] = None
+    expires_at: Optional[datetime] = None
+    status: Optional[str] = None
 
 
 class ViewerAccessRequest(BaseModel):
@@ -59,6 +69,24 @@ class SharedTestValue(BaseModel):
     status: Optional[str] = None
 
 
+class SharedShareInfo(BaseModel):
+    expires_at: datetime
+    view_count: int = 0
+
+
+class SharedProfileInfo(BaseModel):
+    name: str
+    species: Optional[str] = None
+    breed: Optional[str] = None
+
+
+class SharedReportInfo(BaseModel):
+    report_type: Optional[str] = None
+    report_date: Optional[date] = None
+    health_score: Optional[float] = None
+    status: str
+
+
 class SharedReportPayload(BaseModel):
     report_id: int
     report_type: Optional[str] = None
@@ -66,12 +94,19 @@ class SharedReportPayload(BaseModel):
     profile_name: str
     species_category: Optional[str] = None
     health_score: Optional[float] = None
-    test_values: list[SharedTestValue]
+    test_values: list[SharedTestValue] = []
+
+    share: Optional[SharedShareInfo] = None
+    profile: Optional[SharedProfileInfo] = None
+    report: Optional[SharedReportInfo] = None
+    insights: list[str] = []
 
 
 class AccessLogEntry(BaseModel):
     id: int
     accessed_at: datetime
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
     device_type: Optional[str] = None
     viewer_name: Optional[str] = None
     seen: bool
@@ -80,4 +115,7 @@ class AccessLogEntry(BaseModel):
 
 
 class AccessLogListResponse(BaseModel):
+    share_link_id: Optional[int] = None
+    total_accesses: int = 0
     logs: list[AccessLogEntry]
+

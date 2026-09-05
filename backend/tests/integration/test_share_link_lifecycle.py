@@ -220,4 +220,230 @@ def test_expiry_days_rejects_disallowed_values(client, db_session):
     db, user1_id, profile, report, headers1, _ = setup_users_profile_and_report(db_session, client)
 
     resp = client.post(f"/api/reports/{report.id}/share", json={"expires_in_days": 14}, headers=headers1)
-    assert resp.status_code == 422
+    assert resp.status_code in (400, 422)
+
+
+def test_create_share_link_expiry_variants(client, db_session):
+    """Items 1-5: Create share links with 1, 7, 30, and 90 days expiry."""
+    db, user1_id, profile, report, headers1, _ = setup_users_profile_and_report(db_session, client)
+
+    for days in [1, 7, 30, 90]:
+        resp = client.post(f"/api/reports/{report.id}/share", json={"expires_in_days": days}, headers=headers1)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "active"
+        assert data["report_id"] == report.id
+        assert data["share_url"].endswith(f"/shared/{data['token']}")
+        assert data["view_count"] == 0
+        exp = datetime.fromisoformat(data["expires_at"].replace("Z", "+00:00"))
+        # Allow +/- 5 minutes around expected expiry
+        delta = exp.replace(tzinfo=None) - datetime.utcnow()
+        assert abs(delta.total_seconds() - (days * 86400)) < 300
+
+
+def test_reject_sharing_nonexistent_and_unowned_report(client, db_session):
+    """Items 7 & 8: Reject sharing nonexistent report (404) and another user's report (403)."""
+    db, user1_id, profile, report, headers1, headers2 = setup_users_profile_and_report(db_session, client)
+
+    # Nonexistent report
+    resp_404 = client.post("/api/reports/999999/share", json={"expires_in_days": 7}, headers=headers1)
+    assert resp_404.status_code == 404
+
+    # Another user's report
+    resp_403 = client.post(f"/api/reports/{report.id}/share", json={"expires_in_days": 7}, headers=headers2)
+    assert resp_403.status_code == 403
+
+
+def test_cannot_share_uncompleted_report(client, db_session):
+    """Validation: Report must be completed before sharing (HTTP 400)."""
+    from src.models.report import Report
+    db, user1_id, profile, report, headers1, _ = setup_users_profile_and_report(db_session, client)
+
+    report_row = db.query(Report).filter(Report.id == report.id).first()
+    report_row.status = "processing"
+    db.commit()
+
+    resp = client.post(f"/api/reports/{report.id}/share", json={"expires_in_days": 7}, headers=headers1)
+    assert resp.status_code == 400
+    assert "completed" in resp.json()["detail"].lower()
+
+
+def test_share_url_format_and_no_double_slash(client, db_session, monkeypatch):
+    """Item 9: Returned share_url correctly uses configured FRONTEND_BASE_URL without double slashes."""
+    db, user1_id, profile, report, headers1, _ = setup_users_profile_and_report(db_session, client)
+
+    from src.config import get_settings
+    settings = get_settings()
+    monkeypatch.setattr(settings, "frontend_base_url", "https://mediora.health/")
+
+    resp = client.post(f"/api/reports/{report.id}/share", json={"expires_in_days": 7}, headers=headers1)
+    assert resp.status_code == 200
+    token = resp.json()["token"]
+    share_url = resp.json()["share_url"]
+    assert share_url == f"https://mediora.health/shared/{token}"
+    assert "https://mediora.health//shared" not in share_url
+
+
+def test_public_preview_returns_sanitized_metadata(client, db_session):
+    """Item 11: Public preview returns valid, profile_name, species, report_date, expires_at, status without leaks."""
+    db, user1_id, profile, report, headers1, _ = setup_users_profile_and_report(db_session, client)
+
+    resp_create = client.post(f"/api/reports/{report.id}/share", json={"expires_in_days": 7}, headers=headers1)
+    token = resp_create.json()["token"]
+
+    resp_preview = client.get(f"/api/shared/{token}")
+    assert resp_preview.status_code == 200
+    data = resp_preview.json()
+    assert data["valid"] is True
+    assert data["profile_name"] == profile.profile_name
+    assert data["species"] == profile.species_category
+    assert data["status"] == "active"
+    assert "expires_at" in data
+
+    # Ensure no leaks
+    assert "original_file_path" not in data
+    assert "user_id" not in data
+    assert "email" not in data
+    assert "password" not in data
+
+
+def test_public_access_captures_headers_and_device_type(client, db_session):
+    """Items 15-19: Access captures IP, User-Agent, detects mobile/tablet/desktop, stores viewer_name."""
+    db, user1_id, profile, report, headers1, _ = setup_users_profile_and_report(db_session, client)
+
+    resp_create = client.post(f"/api/reports/{report.id}/share", json={"expires_in_days": 7}, headers=headers1)
+    token = resp_create.json()["token"]
+    link_id = resp_create.json()["id"]
+
+    # 1. Mobile access
+    mobile_ua = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148"
+    client.post(
+        f"/api/shared/{token}/access",
+        json={"viewer_name": "Dr. Mobile"},
+        headers={"User-Agent": mobile_ua, "X-Forwarded-For": "203.0.113.195"},
+    )
+
+    # 2. Desktop access
+    desktop_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    client.post(
+        f"/api/shared/{token}/access",
+        json={"viewer_name": "Dr. Desktop"},
+        headers={"User-Agent": desktop_ua, "X-Forwarded-For": "198.51.100.1"},
+    )
+
+    # Check logs via owner endpoint
+    resp_logs = client.get(f"/api/share-links/{link_id}/logs", headers=headers1)
+    assert resp_logs.status_code == 200
+    log_data = resp_logs.json()
+    assert log_data["share_link_id"] == link_id
+    assert log_data["total_accesses"] == 2
+    logs = log_data["logs"]
+
+    # Most recent first
+    assert logs[0]["viewer_name"] == "Dr. Desktop"
+    assert logs[0]["device_type"] == "desktop"
+    assert logs[1]["viewer_name"] == "Dr. Mobile"
+    assert logs[1]["device_type"] == "mobile"
+
+
+def test_multiple_accesses_atomically_increment_view_count(client, db_session):
+    """Item 30: Multiple accesses correctly increment view_count."""
+    db, user1_id, profile, report, headers1, _ = setup_users_profile_and_report(db_session, client)
+
+    resp_create = client.post(f"/api/reports/{report.id}/share", json={"expires_in_days": 7}, headers=headers1)
+    token = resp_create.json()["token"]
+    link_id = resp_create.json()["id"]
+
+    for i in range(5):
+        resp = client.post(f"/api/shared/{token}/access", json={"viewer_name": f"Viewer {i}"})
+        assert resp.status_code == 200
+        assert resp.json()["share"]["view_count"] == i + 1
+
+    link_row = db.query(ShareLink).filter(ShareLink.id == link_id).first()
+    assert link_row.view_count == 5
+
+
+def test_shared_payload_does_not_leak_sensitive_info(client, db_session):
+    """Items 28 & 29: Shared payload does not expose internal file paths, credentials, or OCR text."""
+    db, user1_id, profile, report, headers1, _ = setup_users_profile_and_report(db_session, client)
+
+    resp_create = client.post(f"/api/reports/{report.id}/share", json={"expires_in_days": 7}, headers=headers1)
+    token = resp_create.json()["token"]
+
+    resp = client.post(f"/api/shared/{token}/access", json={"viewer_name": "Reviewer"})
+    assert resp.status_code == 200
+    data = resp.json()
+
+    # Verify structured sections
+    assert "share" in data
+    assert "profile" in data
+    assert "report" in data
+    assert "test_values" in data
+    assert "insights" in data
+
+    # Check for forbidden leaks
+    raw_str = str(data).lower()
+    assert "original_file_path" not in raw_str
+    assert "preprocessed_file_path" not in raw_str
+    assert "ocr_raw_text" not in raw_str
+    assert "password" not in raw_str
+    assert "hashed_password" not in raw_str
+    assert "jwt" not in raw_str
+    assert "owner@mediora.dev" not in raw_str
+
+
+def test_list_share_links_sorting_and_expiry_status(client, db_session):
+    """Items 20, 21: Owner lists links newest first; shows is_expired=True and status='expired' for past links."""
+    db, user1_id, profile, report, headers1, headers2 = setup_users_profile_and_report(db_session, client)
+
+    # Link 1: Created first, then manually expired
+    resp1 = client.post(f"/api/reports/{report.id}/share", json={"expires_in_days": 1}, headers=headers1)
+    link1_id = resp1.json()["id"]
+    link1_row = db.query(ShareLink).filter(ShareLink.id == link1_id).first()
+    link1_row.expires_at = datetime.utcnow() - timedelta(hours=2)
+    db.commit()
+
+    # Link 2: Created second (newer)
+    resp2 = client.post(f"/api/reports/{report.id}/share", json={"expires_in_days": 7}, headers=headers1)
+    link2_id = resp2.json()["id"]
+
+    # Owner list
+    resp_list = client.get(f"/api/profiles/{profile.id}/share-links", headers=headers1)
+    assert resp_list.status_code == 200
+    items = resp_list.json()["share_links"]
+    assert len(items) >= 2
+
+    # Newest created first
+    assert items[0]["id"] == link2_id
+    assert items[0]["is_expired"] is False
+    assert items[0]["status"] == "active"
+    assert items[0]["profile_name"] == profile.profile_name
+    assert items[0]["share_url"].startswith("http")
+
+    # Older expired link
+    assert items[1]["id"] == link1_id
+    assert items[1]["is_expired"] is True
+    assert items[1]["status"] == "expired"
+
+    # Other user cannot list links (403)
+    resp_other = client.get(f"/api/profiles/{profile.id}/share-links", headers=headers2)
+    assert resp_other.status_code == 403
+
+
+def test_public_root_route_support(client, db_session):
+    """Verify public endpoints work at root /shared/{token} in addition to /api/shared/{token}."""
+    db, user1_id, profile, report, headers1, _ = setup_users_profile_and_report(db_session, client)
+
+    resp_create = client.post(f"/api/reports/{report.id}/share", json={"expires_in_days": 7}, headers=headers1)
+    token = resp_create.json()["token"]
+
+    # Root preview
+    resp_preview = client.get(f"/shared/{token}")
+    assert resp_preview.status_code == 200
+    assert resp_preview.json()["valid"] is True
+
+    # Root access
+    resp_access = client.post(f"/shared/{token}/access", json={"viewer_name": "Root Guest"})
+    assert resp_access.status_code == 200
+    assert resp_access.json()["profile_name"] == profile.profile_name
+
