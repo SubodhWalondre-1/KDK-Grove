@@ -1,0 +1,12 @@
+import src.models.user  # noqa: F401
+import src.models.profile  # noqa: F401
+import src.models.report  # noqa: F401
+import src.models.reference_range  # noqa: F401
+import src.models.missing_reference_log  # noqa: F401
+import src.models.translation  # noqa: F401
+import src.models.test_name_alias  # noqa: F401
+import src.models.recommendation  # noqa: F401
+import src.models.trend_insight  # noqa: F401
+import src.models.share_link  # noqa: F401
+import src.models.explanation_cache  # noqa: F401
+import src.models.nutrition  # noqa: F401
