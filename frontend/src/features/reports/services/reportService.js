@@ -5,6 +5,7 @@ import {
   correctReportValues,
   reprocessReport,
   getReferenceRanges,
+  downloadReportPdf,
 } from '../../../services/api/reports';
 import { getDashboard, getProfileHealthScore, getProfileReports } from '../../../services/api/dashboard';
 
@@ -15,6 +16,7 @@ export const reportService = {
   correctReportValues,
   reprocessReport,
   getReferenceRanges,
+  downloadReportPdf,
   getDashboard,
   getProfileHealthScore,
   getProfileReports,

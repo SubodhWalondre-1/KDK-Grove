@@ -38,6 +38,13 @@ export const getReferenceRanges = async () => {
   return response.data;
 };
 
+export const downloadReportPdf = async (reportId) => {
+  const response = await apiClient.get(`/api/reports/${reportId}/download`, {
+    responseType: 'blob',
+  });
+  return response;
+};
+
 export const reportsApi = {
   uploadReport,
   getReportStatus,
@@ -45,6 +52,7 @@ export const reportsApi = {
   correctReportValues,
   reprocessReport,
   getReferenceRanges,
+  downloadReportPdf,
 };
 
 export default reportsApi;
