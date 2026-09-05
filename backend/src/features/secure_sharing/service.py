@@ -1,0 +1,280 @@
+from datetime import datetime, timedelta
+import logging
+import secrets
+from typing import List, Optional, Tuple
+
+from fastapi import HTTPException
+from sqlalchemy import func
+from sqlalchemy.orm import Session, joinedload
+
+from src.core.constants import (
+    SHARE_LINK_INVALID_REASON_EXPIRED,
+    SHARE_LINK_INVALID_REASON_NOT_FOUND,
+    SHARE_LINK_INVALID_REASON_REVOKED,
+    SHARE_LINK_STATUS_ACTIVE,
+    SHARE_LINK_STATUS_REVOKED,
+    SHARE_LINK_TOKEN_BYTES,
+)
+from src.core.exceptions import (
+    ProfileNotFoundError,
+    ReportNotFoundError,
+    ShareLinkInvalidError,
+    ShareLinkNotFoundError,
+)
+from src.core.severity import get_status_color
+from src.models.profile import Profile
+from src.models.report import Report, ReportTestValue
+from src.models.share_link import AccessLog, ShareLink
+from src.schemas.sharing import (
+    AccessLogEntry,
+    ShareLinkResponse,
+    SharedReportPayload,
+    SharedReportPreview,
+    SharedTestValue,
+)
+from src.utils.device_parser import parse_device_type
+
+logger = logging.getLogger(__name__)
+
+
+def generate_share_token() -> str:
+    return secrets.token_urlsafe(SHARE_LINK_TOKEN_BYTES)
+
+
+def get_link_validity(link: Optional[ShareLink]) -> Tuple[bool, Optional[str]]:
+    if link is None:
+        return False, SHARE_LINK_INVALID_REASON_NOT_FOUND
+
+    if link.status == SHARE_LINK_STATUS_REVOKED:
+        return False, SHARE_LINK_INVALID_REASON_REVOKED
+
+    if datetime.utcnow() > link.expires_at:
+        return False, SHARE_LINK_INVALID_REASON_EXPIRED
+
+    return True, None
+
+
+def create_share_link(
+    db: Session, report_id: int, user_id: int, expires_in_days: int
+) -> ShareLink:
+    """Create an active share token for a report with specified expiration days."""
+    report = (
+        db.query(Report)
+        .options(joinedload(Report.profile))
+        .filter(Report.id == report_id)
+        .first()
+    )
+
+    if report is None:
+        raise ReportNotFoundError(detail=f"Report {report_id} not found")
+
+    if report.profile.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden: You do not own this report's profile")
+
+    # Defensively generate token ensuring zero collision
+    while True:
+        token = generate_share_token()
+        existing = db.query(ShareLink).filter(ShareLink.token == token).first()
+        if not existing:
+            break
+
+    expires_at = datetime.utcnow() + timedelta(days=expires_in_days)
+
+    share_link = ShareLink(
+        token=token,
+        report_id=report_id,
+        created_by_user_id=user_id,
+        expires_at=expires_at,
+        status=SHARE_LINK_STATUS_ACTIVE,
+        view_count=0,
+    )
+    db.add(share_link)
+    db.commit()
+    db.refresh(share_link)
+    return share_link
+
+
+def get_share_preview(db: Session, token: str) -> SharedReportPreview:
+    """Return non-sensitive report metadata preview for valid share tokens."""
+    link = db.query(ShareLink).filter(ShareLink.token == token).first()
+    valid, reason = get_link_validity(link)
+
+    if not valid:
+        if reason == SHARE_LINK_INVALID_REASON_NOT_FOUND:
+            raise ShareLinkNotFoundError()
+        raise ShareLinkInvalidError(reason=reason)
+
+    report = (
+        db.query(Report)
+        .options(joinedload(Report.profile))
+        .filter(Report.id == link.report_id)
+        .first()
+    )
+
+    species_category = report.profile.species_category if report and report.profile else None
+
+    return SharedReportPreview(
+        valid=True,
+        report_type=report.report_type if report else None,
+        species_category=species_category,
+    )
+
+
+def record_access_and_get_payload(
+    db: Session,
+    token: str,
+    viewer_name: Optional[str],
+    ip_address: str,
+    user_agent: Optional[str],
+) -> SharedReportPayload:
+    """Log an audit access record and return the full shared report payload."""
+    link = db.query(ShareLink).filter(ShareLink.token == token).first()
+    valid, reason = get_link_validity(link)
+
+    if not valid:
+        if reason == SHARE_LINK_INVALID_REASON_NOT_FOUND:
+            raise ShareLinkNotFoundError()
+        raise ShareLinkInvalidError(reason=reason)
+
+    # Record access log
+    device_type = parse_device_type(user_agent)
+    access_log = AccessLog(
+        share_link_id=link.id,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        device_type=device_type,
+        viewer_name=viewer_name.strip() if viewer_name and viewer_name.strip() else None,
+        seen=False,
+    )
+    db.add(access_log)
+
+    # Increment view count
+    link.view_count += 1
+    db.commit()
+
+    # Load report payload data
+    report = (
+        db.query(Report)
+        .options(joinedload(Report.profile), joinedload(Report.test_values))
+        .filter(Report.id == link.report_id)
+        .first()
+    )
+
+    shared_test_values = []
+    for tv in report.test_values:
+        status = get_status_color(tv.value, tv.ref_low, tv.ref_high)
+        shared_test_values.append(
+            SharedTestValue(
+                test_name=tv.test_name,
+                value=tv.value,
+                unit=tv.unit,
+                ref_low=tv.ref_low,
+                ref_high=tv.ref_high,
+                status=status,
+            )
+        )
+
+    profile_name = report.profile.profile_name if report.profile else "Patient"
+    species_category = report.profile.species_category if report.profile else None
+
+    return SharedReportPayload(
+        report_id=report.id,
+        report_type=report.report_type,
+        report_date=report.report_date,
+        profile_name=profile_name,
+        species_category=species_category,
+        health_score=report.health_score,
+        test_values=shared_test_values,
+    )
+
+
+def list_share_links_for_profile(
+    db: Session, profile_id: int, user_id: int
+) -> List[ShareLinkResponse]:
+    """List all active and revoked share links for reports under a patient profile."""
+    profile = db.query(Profile).filter(Profile.id == profile_id).first()
+    if profile is None:
+        raise ProfileNotFoundError(detail=f"Profile {profile_id} not found")
+
+    if profile.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden: You do not own this profile")
+
+    links = (
+        db.query(ShareLink)
+        .join(Report, ShareLink.report_id == Report.id)
+        .filter(Report.profile_id == profile_id)
+        .all()
+    )
+
+    result = []
+    for link in links:
+        unseen_count = (
+            db.query(func.count(AccessLog.id))
+            .filter(AccessLog.share_link_id == link.id, AccessLog.seen == False)
+            .scalar()
+            or 0
+        )
+
+        latest_access_at = (
+            db.query(func.max(AccessLog.accessed_at))
+            .filter(AccessLog.share_link_id == link.id)
+            .scalar()
+        )
+
+        result.append(
+            ShareLinkResponse(
+                id=link.id,
+                token=link.token,
+                report_id=link.report_id,
+                status=link.status,
+                expires_at=link.expires_at,
+                view_count=link.view_count,
+                created_at=link.created_at,
+                unseen_count=unseen_count,
+                latest_access_at=latest_access_at,
+            )
+        )
+
+    return result
+
+
+def get_share_link_logs(
+    db: Session, share_link_id: int, user_id: int
+) -> List[AccessLogEntry]:
+    """Retrieve audit access logs for a share link and mark all unseen logs as read."""
+    link = db.query(ShareLink).filter(ShareLink.id == share_link_id).first()
+    if link is None:
+        raise ShareLinkNotFoundError(detail=f"Share link {share_link_id} not found")
+
+    if link.created_by_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden: You do not own this share link")
+
+    # Side effect: Mark unseen logs as seen
+    db.query(AccessLog).filter(
+        AccessLog.share_link_id == share_link_id, AccessLog.seen == False
+    ).update({"seen": True})
+    db.commit()
+
+    logs = (
+        db.query(AccessLog)
+        .filter(AccessLog.share_link_id == share_link_id)
+        .order_by(AccessLog.accessed_at.desc())
+        .all()
+    )
+
+    return [AccessLogEntry.model_validate(log) for log in logs]
+
+
+def revoke_share_link(db: Session, share_link_id: int, user_id: int) -> ShareLink:
+    """Revoke an active share link, preventing all future guest access attempts."""
+    link = db.query(ShareLink).filter(ShareLink.id == share_link_id).first()
+    if link is None:
+        raise ShareLinkNotFoundError(detail=f"Share link {share_link_id} not found")
+
+    if link.created_by_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden: You do not own this share link")
+
+    link.status = SHARE_LINK_STATUS_REVOKED
+    db.commit()
+    db.refresh(link)
+    return link
