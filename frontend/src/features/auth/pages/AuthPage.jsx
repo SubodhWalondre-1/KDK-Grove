@@ -22,6 +22,7 @@ export default function AuthPage() {
   // Sign Up form fields
   const [signUpName, setSignUpName] = useState('');
   const [signUpEmail, setSignUpEmail] = useState('');
+  const [signUpDob, setSignUpDob] = useState('');
   const [signUpPassword, setSignUpPassword] = useState('');
   const [signUpConfirmPassword, setSignUpConfirmPassword] = useState('');
   const [signUpError, setSignUpError] = useState('');
@@ -99,11 +100,21 @@ export default function AuthPage() {
     setSignUpLoading(true);
 
     try {
-      const response = await apiClient.post('/api/auth/signup', {
+      const payload = {
         name: signUpName.trim(),
         email: signUpEmail.trim(),
         password: signUpPassword,
-      });
+      };
+      if (signUpDob) {
+        payload.date_of_birth = signUpDob;
+        try {
+          localStorage.setItem('user_dob', signUpDob);
+        } catch {
+          // ignore
+        }
+      }
+
+      const response = await apiClient.post('/api/auth/signup', payload);
 
       const { access_token, user } = response.data;
       login(
@@ -163,6 +174,16 @@ export default function AuthPage() {
                 placeholder="you@example.com"
                 value={signUpEmail}
                 onChange={(e) => setSignUpEmail(e.target.value)}
+              />
+            </div>
+
+            <div className="auth-field">
+              <label htmlFor="signup-dob">Date of Birth</label>
+              <input
+                id="signup-dob"
+                type="date"
+                value={signUpDob}
+                onChange={(e) => setSignUpDob(e.target.value)}
               />
             </div>
 

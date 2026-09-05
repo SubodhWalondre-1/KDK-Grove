@@ -7,6 +7,7 @@ class SignupRequest(BaseModel):
     name: str
     email: EmailStr
     password: str
+    date_of_birth: str | None = None
 
 
 class UserResponse(BaseModel):
