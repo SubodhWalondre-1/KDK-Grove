@@ -1,0 +1,62 @@
+{
+  "Hemoglobin": {
+    "high": "Hemoglobin is the protein in red blood cells that carries oxygen throughout the body. This result is above the typical reference range.",
+    "low": "Hemoglobin is the protein in red blood cells that carries oxygen throughout the body. This result is below the typical reference range."
+  },
+  "Blood Sugar": {
+    "high": "Blood sugar (glucose) measures circulating glucose levels in the bloodstream. This result is above the typical reference range.",
+    "low": "Blood sugar (glucose) measures circulating glucose levels in the bloodstream. This result is below the typical reference range."
+  },
+  "White Blood Cells": {
+    "high": "White blood cells form part of the immune system that responds to infections and inflammation. This result is above the typical reference range.",
+    "low": "White blood cells form part of the immune system that responds to infections and inflammation. This result is below the typical reference range."
+  },
+  "Platelets": {
+    "high": "Platelets are blood cells involved in normal blood clotting. This result is above the typical reference range.",
+    "low": "Platelets are blood cells involved in normal blood clotting. This result is below the typical reference range."
+  },
+  "Creatinine": {
+    "high": "Creatinine is a waste product filtered from the blood by the kidneys. This result is above the typical reference range.",
+    "low": "Creatinine is a waste product filtered from the blood by the kidneys. This result is below the typical reference range."
+  },
+  "Urea Nitrogen": {
+    "high": "Blood urea nitrogen measures nitrogen waste produced from protein breakdown. This result is above the typical reference range.",
+    "low": "Blood urea nitrogen measures nitrogen waste produced from protein breakdown. This result is below the typical reference range."
+  },
+  "ALT": {
+    "high": "Alanine aminotransferase (ALT) is an enzyme primarily found in liver cells. This result is above the typical reference range.",
+    "low": "Alanine aminotransferase (ALT) is an enzyme primarily found in liver cells. This result is below the typical reference range."
+  },
+  "AST": {
+    "high": "Aspartate aminotransferase (AST) is an enzyme found in liver and muscle cells. This result is above the typical reference range.",
+    "low": "Aspartate aminotransferase (AST) is an enzyme found in liver and muscle cells. This result is below the typical reference range."
+  },
+  "Bilirubin": {
+    "high": "Bilirubin is a yellow pigment formed during the normal breakdown of red blood cells. This result is above the typical reference range.",
+    "low": "Bilirubin is a yellow pigment formed during the normal breakdown of red blood cells. This result is below the typical reference range."
+  },
+  "Albumin": {
+    "high": "Albumin is a major protein produced by the liver that helps maintain fluid balance. This result is above the typical reference range.",
+    "low": "Albumin is a major protein produced by the liver that helps maintain fluid balance. This result is below the typical reference range."
+  },
+  "Sodium": {
+    "high": "Sodium is an essential electrolyte involved in fluid balance and nerve function. This result is above the typical reference range.",
+    "low": "Sodium is an essential electrolyte involved in fluid balance and nerve function. This result is below the typical reference range."
+  },
+  "Potassium": {
+    "high": "Potassium is an electrolyte vital for cellular and muscle function, including heart rhythm. This result is above the typical reference range.",
+    "low": "Potassium is an electrolyte vital for cellular and muscle function, including heart rhythm. This result is below the typical reference range."
+  },
+  "Chloride": {
+    "high": "Chloride is an electrolyte that works alongside sodium and potassium to maintain balance. This result is above the typical reference range.",
+    "low": "Chloride is an electrolyte that works alongside sodium and potassium to maintain balance. This result is below the typical reference range."
+  },
+  "Calcium": {
+    "high": "Calcium is a mineral essential for bone structure, muscle contraction, and nerve signaling. This result is above the typical reference range.",
+    "low": "Calcium is a mineral essential for bone structure, muscle contraction, and nerve signaling. This result is below the typical reference range."
+  },
+  "Thyroid Stimulating Hormone": {
+    "high": "Thyroid stimulating hormone (TSH) regulates thyroid gland hormone production. This result is above the typical reference range.",
+    "low": "Thyroid stimulating hormone (TSH) regulates thyroid gland hormone production. This result is below the typical reference range."
+  }
+}

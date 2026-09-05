@@ -1,0 +1,138 @@
+[
+  {
+    "id": "diet_general_framework",
+    "category": "diet",
+    "clinical_conditions": ["general", "wellness", "weight_management"],
+    "keywords": ["macronutrients", "tdee", "portion_control", "plate_method", "protein", "carbohydrates", "fats"],
+    "title": "Core Principles of a Balanced Diet",
+    "content": "Macronutrient Distribution: Target 45-55% complex carbohydrates, 20-30% healthy fats, and 20-25% lean protein. Use the plate method: half filled with non-starchy vegetables, one-quarter with lean protein, and one-quarter with complex carbohydrates. Sample meal structure: Breakfast (Oatmeal with chia seeds & berries OR egg white omelet with spinach & whole-grain toast); Lunch (Grilled chicken breast or tofu with quinoa and mixed greens); Dinner (Baked salmon or lentil curry with steamed broccoli)."
+  },
+  {
+    "id": "diet_t2dm_diabetes",
+    "category": "diet",
+    "clinical_conditions": ["diabetes", "high_blood_sugar", "hyperglycemia", "hba1c"],
+    "keywords": ["diabetes", "blood_sugar", "glucose", "glycemic_index", "gi", "hba1c", "oats", "chickpeas", "wild_rice"],
+    "title": "Type 2 Diabetes Mellitus (T2DM) Diet Plan",
+    "content": "Clinical Target: Glycemic index (GI) management and HbA1c optimization. Strategy: High-fiber complex carbohydrates, low glycemic load, and healthy fats to slow glucose absorption. Sample Meals: Breakfast (Steel-cut oats with ground flaxseed and walnuts); Lunch (Spinach salad with grilled chicken breast, avocado, chickpeas, and olive oil vinaigrette); Dinner (Baked cod or tofu with wild rice and roasted asparagus)."
+  },
+  {
+    "id": "diet_ckd_kidney",
+    "category": "diet",
+    "clinical_conditions": ["kidney_disease", "ckd", "high_creatinine", "high_urea", "renal"],
+    "keywords": ["creatinine", "urea", "kidney", "ckd", "gfr", "phosphorus", "potassium", "protein_restriction", "sodium_restriction"],
+    "title": "Chronic Kidney Disease (CKD) Diet Plan",
+    "content": "Clinical Target: Reducing metabolic waste buildup and protecting Glomerular Filtration Rate (GFR). Strategy: Strict restriction of dietary protein, phosphorus, sodium, and potassium. Sample Meals: Breakfast (Cream of wheat with blueberries and white egg omelet); Lunch (Turkey breast sandwich on white bread with cranberry sauce); Dinner (White rice, boiled green beans, and small portion <3oz lean chicken breast)."
+  },
+  {
+    "id": "diet_hypertension_cardiovascular",
+    "category": "diet",
+    "clinical_conditions": ["hypertension", "high_blood_pressure", "cardiovascular", "high_cholesterol"],
+    "keywords": ["hypertension", "blood_pressure", "dash", "sodium", "potassium", "magnesium", "ldl_cholesterol", "salmon"],
+    "title": "Hypertension & Cardiovascular DASH Framework",
+    "content": "Clinical Target: Reduction of systolic and diastolic blood pressure, lowering LDL cholesterol. Strategy: High potassium, high magnesium, high calcium, and low sodium (<1500 mg per day). Sample Meals: Breakfast (Low-fat Greek yogurt with sliced bananas and almonds); Lunch (Whole-wheat wrap with tuna salad, spinach, and tomatoes); Dinner (Grilled salmon, quinoa, and steamed broccoli)."
+  },
+  {
+    "id": "avoid_general_processed",
+    "category": "foods_to_avoid",
+    "clinical_conditions": ["general", "obesity", "metabolic_syndrome"],
+    "keywords": ["sugar", "refined_carbs", "trans_fats", "processed_meats", "sodium", "soda"],
+    "title": "Highly Processed Foods & Refined Sugars to Avoid",
+    "content": "Sugar-Sweetened Beverages: Soda, sweetened energy drinks, and commercial fruit juices cause insulin spikes and visceral fat. Refined Carbohydrates: White bread, pastries, sugary cereals stripped of fiber. Trans Fats: Hydrogenated oils in commercial fried foods aggressively raise LDL and lower HDL cholesterol. High Sodium: Canned soups, bacon, deli meats exacerbate hypertension and fluid retention."
+  },
+  {
+    "id": "avoid_maoi_interactions",
+    "category": "foods_to_avoid",
+    "clinical_conditions": ["maoi_medication", "depression"],
+    "keywords": ["maoi", "tyramine", "aged_cheese", "cured_meats", "red_wine", "soy_sauce", "hypertensive_crisis"],
+    "title": "Absolute Contraindication: MAOI Medication & Tyramine Foods",
+    "content": "Absolute Contraindication: Avoid aged cheeses, cured meats, red wine, and soy sauce when taking MAOI antidepressant medications. High Tyramine content triggers a severe, life-threatening hypertensive crisis."
+  },
+  {
+    "id": "avoid_celiac_disease",
+    "category": "foods_to_avoid",
+    "clinical_conditions": ["celiac", "gluten_sensitivity"],
+    "keywords": ["celiac", "gluten", "wheat", "barley", "rye", "malt", "autoimmune"],
+    "title": "Absolute Contraindication: Celiac Disease & Gluten",
+    "content": "Absolute Contraindication: Avoid wheat, barley, rye, and malt. Gluten causes autoimmune destruction of small intestine villi leading to severe malabsorption."
+  },
+  {
+    "id": "avoid_gout_hyperuricemia",
+    "category": "foods_to_avoid",
+    "clinical_conditions": ["gout", "high_uric_acid", "hyperuricemia"],
+    "keywords": ["gout", "uric_acid", "purine", "organ_meats", "shellfish", "beer", "fructose"],
+    "title": "Absolute Contraindication: Gout & High Purine Foods",
+    "content": "Absolute Contraindication: Avoid organ meats, shellfish, beer, and high-fructose corn syrup. High Purine content rapidly elevates serum uric acid, leading to acute joint crystallization and painful gout flare-ups."
+  },
+  {
+    "id": "avoid_gerd_reflux",
+    "category": "foods_to_avoid",
+    "clinical_conditions": ["gerd", "acid_reflux"],
+    "keywords": ["gerd", "reflux", "peppermint", "chocolate", "citrus", "caffeine", "les"],
+    "title": "Absolute Contraindication: GERD & Lower Esophageal Relaxants",
+    "content": "Absolute Contraindication: Avoid peppermint, chocolate, citrus fruits, and caffeine. These items relax the Lower Esophageal Sphincter (LES), exacerbating acid regurgitation."
+  },
+  {
+    "id": "avoid_statin_grapefruit",
+    "category": "foods_to_avoid",
+    "clinical_conditions": ["statin_medication", "high_cholesterol"],
+    "keywords": ["statin", "atorvastatin", "grapefruit", "cyp3a4", "rhabdomyolysis"],
+    "title": "Relative Contraindication: Statin Therapy & Grapefruit",
+    "content": "Drug-Nutrient Interaction: Avoid Grapefruit and grapefruit juice when taking statin medications (e.g. Atorvastatin). Grapefruit inhibits CYP3A4 intestinal enzymes, dramatically increasing systemic drug concentration and rhabdomyolysis (muscle breakdown) risk."
+  },
+  {
+    "id": "avoid_warfarin_vitamin_k",
+    "category": "foods_to_avoid",
+    "clinical_conditions": ["warfarin_medication", "anticoagulant"],
+    "keywords": ["warfarin", "vitamin_k", "spinach", "kale", "collard_greens", "thrombosis", "bleeding"],
+    "title": "Drug-Nutrient Interaction: Warfarin & Vitamin K Fluctuations",
+    "content": "Drug-Nutrient Interaction: Maintain consistent daily intake of Vitamin K-dense foods (spinach, kale, collard greens) if taking Warfarin. Drastic fluctuations directly alter anticoagulant efficacy, risking blood clots or internal bleeding."
+  },
+  {
+    "id": "exercise_aerobic_resistance",
+    "category": "exercise",
+    "clinical_conditions": ["general", "fitness", "t2dm", "dyslipidemia"],
+    "keywords": ["aerobic", "strength", "resistance", "heart_rate", "max_hr", "squats", "deadlifts", "pushups"],
+    "title": "Cardiovascular & Resistance Exercise Guidelines",
+    "content": "Aerobic Training: 150 minutes of moderate-intensity (50-70% Max HR) or 75 minutes of vigorous-intensity per week. Calculate Max HR = 220 - age. Strength Training: 2 to 3 days per week targeting major muscle groups (2-3 sets of 8-12 reps using compound movements like squats, deadlifts, push-ups, and rows)."
+  },
+  {
+    "id": "exercise_osteoporosis_bone",
+    "category": "exercise",
+    "clinical_conditions": ["osteoporosis", "low_bone_density"],
+    "keywords": ["osteoporosis", "bone_density", "weight_bearing", "axial_loading", "avoid_twists", "spine"],
+    "title": "Osteoporosis & Bone Density Management",
+    "content": "Frequency: 3 days per week. Moderate to high axial loading weight-bearing aerobic activities (brisk walking, dancing) and resistance training. Absolute Avoidance: Avoid high-impact spinal flexion or deep twisting movements (standard sit-ups, deep twists) to prevent vertebral fractures."
+  },
+  {
+    "id": "exercise_clinical_contraindications",
+    "category": "exercise",
+    "clinical_conditions": ["angina", "dyspnea", "hypoglycemia"],
+    "keywords": ["stop_exercise", "chest_pain", "angina", "dyspnea", "dizziness", "syncope", "hypoglycemia"],
+    "title": "Clinical Contraindications to Stop Exercise Immediately",
+    "content": "Stop Activity Immediately If: Patient experiences acute chest pain/discomfort (angina), sudden disproportionate dyspnea (shortness of breath), dizziness, syncope/fainting, or neuroglycopenia symptoms in diabetics (blood glucose < 70 mg/dL)."
+  },
+  {
+    "id": "lifestyle_circadian_sleep",
+    "category": "lifestyle",
+    "clinical_conditions": ["general", "sleep_apnea", "fatigue"],
+    "keywords": ["sleep", "circadian", "cortisol", "growth_hormone", "ghrelin", "blue_light", "sleep_hygiene"],
+    "title": "Circadian Biology & Sleep Optimization",
+    "content": "Duration: Target 7 to 9 hours of dark-adapted sleep per night to optimize pulsatile Growth Hormone (GH) secretion and regulate cortisol. Sleep deprivation (<6 hours/night) directly impairs insulin sensitivity and upregulates ghrelin (hunger hormone). Eliminate blue light exposure 60 minutes before bed."
+  },
+  {
+    "id": "lifestyle_hydration_protocols",
+    "category": "lifestyle",
+    "clinical_conditions": ["hydration", "dehydration", "heart_failure", "ckd_restriction"],
+    "keywords": ["hydration", "fluid_volume", "water", "heart_failure", "fluid_restriction", "edema"],
+    "title": "Clinical Hydration Protocols & Fluid Restrictions",
+    "content": "Standard Baseline: Fluid Volume (mL) = Body Weight (kg) x 30 to 35 mL. Fluid Restrictive Pathologies: For patients with Advanced Heart Failure (NYHA III/IV) or Anuric/Oliguric Chronic Kidney Disease, daily fluid volumes MUST be strictly capped (1.5 to 2.0 Liters per 24 hours) to prevent pulmonary edema and acute fluid overload."
+  },
+  {
+    "id": "lifestyle_stress_mbsr",
+    "category": "lifestyle",
+    "clinical_conditions": ["stress", "anxiety", "high_cortisol"],
+    "keywords": ["stress", "cortisol", "hpa_axis", "mbsr", "diaphragmatic_breathing", "vagal_tone", "mindfulness"],
+    "title": "Neuroendocrine Stress Management & HPA-Axis",
+    "content": "HPA-Axis Regulation: Chronic psychological distress activates the Hypothalamic-Pituitary-Adrenal axis, maintaining elevated cortisol and abdominal fat storage. Recommendation: Practice Mindfulness-Based Stress Reduction (MBSR) or diaphragmatic breathing (6 breaths per minute) to stimulate vagal nerve tone and downregulate sympathetic activity."
+  }
+]
