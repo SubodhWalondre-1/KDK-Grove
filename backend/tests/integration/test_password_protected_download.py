@@ -107,11 +107,11 @@ def test_download_protected_report_success(client, user_and_profile_setup):
 
     # 2. Incorrect password fails
     assert reader.decrypt("WRONGPASS1") == 0
-    assert reader.decrypt("subo2005") == 0  # wrong case
 
-    # 3. Correct password succeeds (SUBO + 2005)
-    expected_password = "SUBO2005"
+    # 3. Correct password succeeds (SUBODH uppercase or lowercase)
+    expected_password = "SUBODH"
     assert reader.decrypt(expected_password) in (1, 2)
+    assert reader.decrypt("subodh") in (1, 2)
 
     # 4. Opening without password fails in pdfium
     with pytest.raises(Exception):
@@ -156,8 +156,8 @@ def test_download_unauthenticated_rejected(client, user_and_profile_setup):
     assert resp.status_code == 401
 
 
-def test_download_missing_dob_returns_bad_request(client, db_session):
-    """Profile without DOB returns 400 Bad Request with controlled error message."""
+def test_download_without_dob_succeeds(client, db_session):
+    """Profile without DOB downloads successfully using profile name as password."""
     resp = client.post(
         "/api/auth/signup",
         json={"name": "No DOB User", "email": "nodob@mediora.dev", "password": "password123"},
@@ -170,7 +170,7 @@ def test_download_missing_dob_returns_bad_request(client, db_session):
         user_id=user_id,
         profile_name="Subodh",
         species="human",
-        date_of_birth=None,  # Missing DOB
+        date_of_birth=None,  # Missing DOB - should still succeed!
     )
     db_session.add(profile_no_dob)
     db_session.commit()
@@ -179,12 +179,17 @@ def test_download_missing_dob_returns_bad_request(client, db_session):
     report = _create_report(db_session, profile_no_dob.id)
 
     resp_download = client.get(f"/api/reports/{report.id}/download", headers=headers)
-    assert resp_download.status_code == 400
-    assert "Date of birth is required" in resp_download.json()["detail"]
+    assert resp_download.status_code == 200
+    assert resp_download.headers["content-type"] == "application/pdf"
+    assert resp_download.headers.get("x-password-hint") == "SUBODH"
+
+    # Verify decrypts with SUBODH
+    reader = PyPDF2.PdfReader(io.BytesIO(resp_download.content))
+    assert reader.decrypt("SUBODH") in (1, 2)
 
 
 def test_download_veterinary_report_works(client, db_session):
-    """Veterinary patient (e.g. Dog Daisy, DOB 2021) generates DAIS2021 password."""
+    """Veterinary patient (e.g. Dog Daisy) generates DAISY password without needing DOB."""
     resp = client.post(
         "/api/auth/signup",
         json={"name": "Pet Owner", "email": "petowner@mediora.dev", "password": "password123"},
@@ -198,7 +203,7 @@ def test_download_veterinary_report_works(client, db_session):
         profile_name="Daisy",
         species="dog",
         species_category="canine",
-        date_of_birth=date(2021, 4, 10),
+        date_of_birth=None,  # Animal profiles typically have no DOB
     )
     db_session.add(vet_profile)
     db_session.commit()
@@ -214,14 +219,15 @@ def test_download_veterinary_report_works(client, db_session):
     assert resp.status_code == 200
 
     pdf_bytes = resp.content
-    vet_password = "DAIS2021"
+    vet_password = "DAISY"
 
     # Verify fails with wrong password
     reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
     assert reader.decrypt("WRONG") == 0
 
-    # Verify succeeds with DAIS2021
+    # Verify succeeds with DAISY (and daisy)
     assert reader.decrypt(vet_password) in (1, 2)
+    assert reader.decrypt("daisy") in (1, 2)
 
     doc = pdfium.PdfDocument(pdf_bytes, password=vet_password)
     assert len(doc) >= 1
@@ -237,12 +243,17 @@ def test_multiple_reports_same_patient(client, user_and_profile_setup):
     r1 = _create_report(db, profile.id, report_date=date(2025, 1, 10))
     r2 = _create_report(db, profile.id, report_date=date(2025, 6, 15))
 
-    expected_pwd = "SUBO2005"
+    expected_pwd = "SUBODH"
 
     resp1 = client.get(f"/api/reports/{r1.id}/download", headers=headers)
     assert resp1.status_code == 200
     doc1 = pdfium.PdfDocument(resp1.content, password=expected_pwd)
     assert len(doc1) >= 1
+
+    resp2 = client.get(f"/api/reports/{r2.id}/download", headers=headers)
+    assert resp2.status_code == 200
+    doc2 = pdfium.PdfDocument(resp2.content, password=expected_pwd)
+    assert len(doc2) >= 1
 
     resp2 = client.get(f"/api/reports/{r2.id}/download", headers=headers)
     assert resp2.status_code == 200

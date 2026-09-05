@@ -60,6 +60,7 @@ export default function DashboardPage() {
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState('');
   const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [downloadPassword, setDownloadPassword] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -150,9 +151,15 @@ export default function DashboardPage() {
         disposition,
         `Mediora_Report_${reportId}.pdf`
       );
+      const hint =
+        response.headers?.['x-password-hint'] ||
+        response.headers?.['X-Password-Hint'] ||
+        profileName?.split(' ')[0]?.toUpperCase() ||
+        'YOUR NAME';
+      setDownloadPassword(hint);
       downloadBlob(response.data, filename);
       setDownloadSuccess(true);
-      setTimeout(() => setDownloadSuccess(false), 6000);
+      setTimeout(() => setDownloadSuccess(false), 12000);
     } catch (err) {
       const message = await getDownloadErrorMessage(err);
       setDownloadError(message);
@@ -476,20 +483,42 @@ export default function DashboardPage() {
           <div
             style={{
               marginBottom: '20px',
-              padding: '12px 16px',
+              padding: '14px 18px',
               backgroundColor: 'rgba(16, 185, 129, 0.08)',
-              border: '1px solid rgba(16, 185, 129, 0.2)',
+              border: '1px solid rgba(16, 185, 129, 0.25)',
               borderRadius: '12px',
-              color: '#059669',
+              color: '#065F46',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               fontSize: '14px',
+              gap: '12px',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <CheckCircle2 size={18} />
-              <span>Encrypted report downloaded successfully. Enter your password in your PDF viewer to open it.</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <CheckCircle2 size={20} color="#059669" />
+              <span>
+                <strong>PDF Downloaded!</strong> Password to open:
+              </span>
+              <span
+                style={{
+                  fontFamily: 'monospace',
+                  fontWeight: 800,
+                  fontSize: '15px',
+                  letterSpacing: '1px',
+                  backgroundColor: '#ECFDF5',
+                  border: '1px solid #A7F3D0',
+                  color: '#047857',
+                  padding: '2px 10px',
+                  borderRadius: '6px',
+                }}
+              >
+                {downloadPassword}
+              </span>
+              <span style={{ fontSize: '12px', color: '#6B7280' }}>
+                (Sirf ye name enter karo PDF khul jayegi)
+              </span>
             </div>
             <button
               type="button"
@@ -499,8 +528,8 @@ export default function DashboardPage() {
                 border: 'none',
                 color: '#059669',
                 cursor: 'pointer',
-                fontWeight: 600,
-                fontSize: '18px',
+                fontWeight: 700,
+                fontSize: '20px',
                 padding: '0 4px',
               }}
             >

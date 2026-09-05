@@ -24,61 +24,41 @@ from src.core.exceptions import ProtectedReportError
 from src.models.report import Report
 
 
-def generate_pdf_password(name: Optional[str], dob: Optional[date | datetime | str]) -> str:
-    """Derive the PDF password from patient name and date of birth.
+def generate_pdf_password(
+    name: Optional[str],
+    dob: Optional[date | datetime | str] = None,
+    user_name: Optional[str] = None,
+) -> str:
+    """Derive the PDF password from patient name (DOB not required).
 
-    Rule: FIRST 4 CHARACTERS OF NAME (UPPERCASE) + 4-DIGIT BIRTH YEAR
-    - Names are stripped of unnecessary whitespace.
-    - Names shorter than 4 characters use all normalized characters.
-    - DOB must be a valid date, datetime, or ISO/standard date string.
+    Rule: PATIENT NAME IN UPPERCASE (first clean alphanumeric word).
+    - Date of birth is no longer required.
+    - Names are stripped of unnecessary whitespace and punctuation.
+    - If profile name is missing, falls back to user_name.
     """
-    if not name or not str(name).strip():
+    candidate = name or user_name
+    if not candidate or not str(candidate).strip():
         raise ProtectedReportError(detail="Patient profile name is required to generate the protected report.")
 
-    # Normalize name: remove all spaces, take up to first 4 chars
-    clean_name = "".join(str(name).strip().split())
-    # Keep alphanumeric characters if available, else standard clean
-    alpha_chars = re.sub(r"[^A-Za-z0-9]", "", clean_name)
-    target_str = alpha_chars if alpha_chars else clean_name
-    prefix = target_str[:4].upper()
+    raw_str = str(candidate).strip()
+    first_token = raw_str.split()[0]
+    clean_token = re.sub(r"[^A-Za-z0-9]", "", first_token)
 
-    if not prefix:
-        raise ProtectedReportError(detail="Patient profile name is invalid for password generation.")
+    if not clean_token:
+        alpha_words = re.findall(r"[A-Za-z0-9]+", raw_str)
+        clean_token = alpha_words[0] if alpha_words else "MEDIORAPDF"
 
-    if dob is None:
-        raise ProtectedReportError(detail="Date of birth is required to generate the protected report.")
-
-    birth_year = None
-    if isinstance(dob, (date, datetime)):
-        birth_year = f"{dob.year:04d}"
-    elif isinstance(dob, str):
-        dob_str = dob.strip()
-        if not dob_str:
-            raise ProtectedReportError(detail="Date of birth is required to generate the protected report.")
-
-        # Try parsing standard formats
-        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d", "%d-%m-%Y", "%m/%d/%Y"):
-            try:
-                dt = datetime.strptime(dob_str, fmt)
-                birth_year = f"{dt.year:04d}"
-                break
-            except ValueError:
-                continue
-
-        # Regex fallback for 4-digit year (1900-2099)
-        if not birth_year:
-            m = re.search(r"\b(19\d{2}|20\d{2})\b", dob_str)
-            if m:
-                birth_year = m.group(1)
-
-    if not birth_year:
-        raise ProtectedReportError(detail="Invalid date of birth format for generating the protected report.")
-
-    return f"{prefix}{birth_year}"
+    return clean_token.upper()
 
 
 def encrypt_pdf(input_pdf_bytes: bytes, password: str) -> bytes:
-    """Encrypt PDF bytes using standard PDF encryption with user password."""
+    """Encrypt PDF bytes using standard PDF encryption with user and owner passwords.
+
+    Supports both UPPERCASE and lowercase inputs:
+    - user_password is set to uppercase (e.g. 'SUBODH')
+    - owner_password is set to lowercase (e.g. 'subodh')
+    Both passwords unlock and open the document in all standard PDF viewers.
+    """
     if not input_pdf_bytes:
         raise ProtectedReportError(detail="Cannot encrypt an empty PDF document.")
     if not password:
@@ -97,8 +77,13 @@ def encrypt_pdf(input_pdf_bytes: bytes, password: str) -> bytes:
     for page in reader.pages:
         writer.add_page(page)
 
-    # Set user password (required to open document)
-    writer.encrypt(user_password=password)
+    user_pwd = password.upper()
+    owner_pwd = password.lower()
+    if owner_pwd == user_pwd:
+        owner_pwd = f"{user_pwd}_owner"
+
+    # Set user and owner passwords with 128-bit AES encryption
+    writer.encrypt(user_password=user_pwd, owner_password=owner_pwd, use_128bit=True)
 
     output_stream = io.BytesIO()
     writer.write(output_stream)
