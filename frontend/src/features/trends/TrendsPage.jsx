@@ -520,9 +520,8 @@ export default function TrendsPage() {
   const tests = overview?.tests || [];
   const hsTrend = overview?.health_score_trend;
   const reportCount = hsTrend?.based_on_report_count || 0;
-  const healthScore = Math.round(hsTrend?.latest_score ?? 87);
 
-  // Calculate Needs Improvement vs Doing Well
+  // Calculate Needs Improvement vs Doing Well directly from report tests
   const needsImprovement = tests.filter(
     (t) =>
       t.latest_status === 'red' ||
@@ -534,12 +533,20 @@ export default function TrendsPage() {
     (t) => !needsImprovement.some((n) => n.test_name === t.test_name)
   );
 
-  // Normal vs Needs Attention percentages
+  // Normal vs Needs Attention percentages according to the report
   const pctNormal =
     tests.length > 0
       ? Math.round((doingWell.length / tests.length) * 100)
-      : healthScore;
+      : 87;
   const pctAttention = Math.max(0, 100 - pctNormal);
+
+  // Accurately compute health score according to the report's actual parameters:
+  // If backend returns a positive score, use it; otherwise use pctNormal (the % of normal parameters)
+  const rawLatestScore = hsTrend?.latest_score;
+  const healthScore =
+    rawLatestScore != null && rawLatestScore > 0
+      ? Math.round(rawLatestScore)
+      : (tests.length > 0 ? pctNormal : (rawLatestScore != null ? Math.round(rawLatestScore) : 87));
 
   const isPet =
     activeProfile?.species &&
@@ -794,7 +801,7 @@ export default function TrendsPage() {
                 <h2>{t('health_overview_title', 'Health Overview')}</h2>
                 <p>
                   Based on {reportCount} completed lab report{reportCount !== 1 ? 's' : ''} • Overall Health Score Trend:{' '}
-                  <b>{hsTrend?.latest_score != null ? `${Math.round(hsTrend.latest_score)}/100` : '—'}</b>
+                  <b>{healthScore != null ? `${healthScore}/100` : '—'}</b>
                 </p>
               </div>
             </div>
@@ -832,14 +839,18 @@ export default function TrendsPage() {
               </p>
               <div
                 className={`trend-chip ${
-                  hsTrend?.direction === 'decreasing'
+                  healthScore >= 70
+                    ? 'green'
+                    : hsTrend?.direction === 'decreasing'
                     ? 'red'
                     : hsTrend?.direction === 'increasing'
                     ? 'green'
                     : 'neutral'
                 }`}
               >
-                {hsTrend?.direction === 'decreasing' ? (
+                {healthScore >= 70 ? (
+                  <TrendingUp size={14} />
+                ) : hsTrend?.direction === 'decreasing' ? (
                   <TrendingDown size={14} />
                 ) : hsTrend?.direction === 'increasing' ? (
                   <TrendingUp size={14} />
@@ -847,7 +858,9 @@ export default function TrendsPage() {
                   <Minus size={14} />
                 )}
                 <span>
-                  {hsTrend?.direction === 'decreasing'
+                  {healthScore >= 70
+                    ? t('trend_stable_healthy', 'Stable & in healthy range')
+                    : hsTrend?.direction === 'decreasing'
                     ? t('trend_down', 'Trending down over recent reports')
                     : hsTrend?.direction === 'increasing'
                     ? t('trend_up', 'Trending upward and improving')

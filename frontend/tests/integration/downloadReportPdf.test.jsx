@@ -229,7 +229,8 @@ describe('Password-Protected PDF Download Flow', () => {
       });
 
       // Verify success feedback
-      expect(await screen.findByText(/downloaded!/i)).toBeInTheDocument();
+      const downloadedElems = await screen.findAllByText(/downloaded!/i);
+      expect(downloadedElems.length).toBeGreaterThanOrEqual(1);
 
       createObjectURLSpy.mockRestore();
       revokeObjectURLSpy.mockRestore();

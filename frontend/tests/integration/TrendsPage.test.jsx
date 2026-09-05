@@ -227,4 +227,31 @@ describe('TrendsPage Integration Tests', () => {
     // Reset back to English
     useUIStore.setState({ activeLanguage: 'en-IN' });
   });
+
+  it('accurately displays health score according to report when backend latest_score is 0', async () => {
+    trendsApi.getTrendOverview.mockResolvedValueOnce({
+      profile_id: 1,
+      health_score_trend: {
+        sparkline: [0],
+        direction: 'decreasing',
+        latest_score: 0,
+        based_on_report_count: 29,
+      },
+      tests: [
+        { test_name: 'Test 1', latest_value: 10, latest_unit: 'g/dL', latest_status: 'green', direction: 'stable' },
+        { test_name: 'Test 2', latest_value: 20, latest_unit: 'mg/dL', latest_status: 'green', direction: 'stable' },
+        { test_name: 'Test 3', latest_value: 30, latest_unit: '%', latest_status: 'green', direction: 'stable' },
+        { test_name: 'Test 4', latest_value: 100, latest_unit: 'U/L', latest_status: 'red', direction: 'decreasing' },
+      ],
+    });
+
+    renderComponent();
+
+    // 3 out of 4 parameters are normal = 75%
+    const pctElements = await screen.findAllByText('75%');
+    expect(pctElements.length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('75/100')).toBeInTheDocument();
+    expect(screen.getByText('25%')).toBeInTheDocument();
+  });
 });
+

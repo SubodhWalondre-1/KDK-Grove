@@ -275,6 +275,25 @@ export default function DashboardPage() {
   const normalCount = Math.max(0, totalCount - abnormalCount);
   const formattedDate = dashboard.report_date || '10 May 2025';
 
+  const calculatedScore = totalCount > 0 ? Math.round((normalCount / totalCount) * 100) : null;
+  const accurateHealthScore =
+    dashboard.health_score != null && dashboard.health_score > 0
+      ? Math.round(dashboard.health_score)
+      : calculatedScore ?? (dashboard.health_score != null ? Math.round(dashboard.health_score) : 85);
+
+  const accurateHealthLabel =
+    dashboard.health_score_label &&
+    dashboard.health_score_label !== 'Needs Attention' &&
+    (dashboard.health_score > 0 || accurateHealthScore >= 70)
+      ? dashboard.health_score_label
+      : accurateHealthScore >= 80
+      ? 'Excellent'
+      : accurateHealthScore >= 60
+      ? 'Healthy'
+      : accurateHealthScore >= 40
+      ? 'Fair'
+      : 'Needs Attention';
+
   const filteredTestValues = (dashboard.test_values || []).filter((tv) =>
     tv.test_name.toLowerCase().includes(tableSearchQuery.toLowerCase())
   );
@@ -644,8 +663,8 @@ export default function DashboardPage() {
 
         {/* 4 KPI Metric Cards Row */}
         <TopMetricCardsRow
-          healthScore={dashboard.health_score}
-          healthScoreLabel={dashboard.health_score_label}
+          healthScore={accurateHealthScore}
+          healthScoreLabel={accurateHealthLabel}
           abnormalCount={abnormalCount}
           normalCount={normalCount}
           totalCount={totalCount}
