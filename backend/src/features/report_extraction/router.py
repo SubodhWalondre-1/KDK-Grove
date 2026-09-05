@@ -126,7 +126,7 @@ def download_protected_report(
         raise HTTPException(status_code=403, detail="Forbidden: You do not own this report's profile")
 
     # Generate patient password (NEVER logged or stored in database)
-    password = generate_pdf_password(profile.profile_name, profile.date_of_birth)
+    password = generate_pdf_password(profile.profile_name, profile.date_of_birth, user_name=current_user.name)
 
     # Obtain original or dynamically generated PDF bytes
     raw_pdf_bytes = build_or_get_report_pdf(report)
@@ -141,6 +141,8 @@ def download_protected_report(
         headers={
             "Content-Disposition": f'attachment; filename="Mediora_Report_{report_id}.pdf"',
             "Content-Type": "application/pdf",
+            "X-Password-Hint": password,
+            "Access-Control-Expose-Headers": "Content-Disposition, X-Password-Hint",
         },
     )
 
