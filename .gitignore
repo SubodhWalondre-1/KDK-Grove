@@ -1,8 +1,9 @@
 # Node & Frontend
-frontend/
 node_modules/
 dist/
 *.log
+frontend/node_modules/
+frontend/dist/
 
 # Python
 __pycache__/
@@ -24,7 +25,10 @@ backend/uploads/
 # Env & Secrets
 .env
 .env.local
+.env.*.local
 backend/.env
+frontend/.env
+frontend/.env.local
 
 # Temporary Files & Docs
 context.md
@@ -32,9 +36,12 @@ uiux.md
 *.zip
 *.rar
 *.pdf
-*.jpeg
-*.jpg
-*.png
+
+# Allow frontend static images
+!frontend/**/*.png
+!frontend/**/*.jpg
+!frontend/**/*.jpeg
+!frontend/**/*.svg
 
 # OS
 .DS_Store

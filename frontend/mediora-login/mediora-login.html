@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mediora | Sign In</title>
+<style>
+  :root{
+    --page-bg: #f4f7fb;
+    --card-bg: #ffffff;
+    --text-dark: #1e293b;
+    --text-muted: #64748b;
+    --input-bg: #ffffff;
+    --input-border: #e2e8f0;
+    --placeholder: #94a3b8;
+    --accent: #4f46e5;
+    --accent-dark: #4338ca;
+    --accent-light: #6d63ea;
+  }
+
+  *{
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+
+  body{
+    background-color: var(--page-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  html, body{
+    width: 100%;
+    overflow-x: hidden;
+  }
+
+  .container{
+    background-color: var(--card-bg);
+    border-radius: 24px;
+    box-shadow: 0 10px 40px rgba(30, 41, 59, 0.12);
+    position: relative;
+    overflow: hidden;
+    width: 920px;
+    max-width: 94vw;
+    min-height: 560px;
+  }
+
+  .logo{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .logo-icon{
+    width: 30px;
+    height: 30px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+
+  .logo-icon.mini{
+    width: 28px;
+    height: 28px;
+    filter: brightness(0) invert(1);
+  }
+
+  .logo span{
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-dark);
+    letter-spacing: -0.3px;
+    white-space: nowrap;
+  }
+
+  .logo span em{
+    font-style: normal;
+    color: var(--accent);
+  }
+
+  h1{
+    font-size: 21px;
+    font-weight: 700;
+    color: var(--text-dark);
+    margin-bottom: 5px;
+    text-align: center;
+    line-height: 1.3;
+  }
+
+  .subtitle{
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 20px;
+    text-align: center;
+  }
+
+  .container form{
+    background-color: var(--card-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    padding: 0 44px;
+    height: 100%;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .field{
+    width: 100%;
+    margin-bottom: 11px;
+  }
+
+  .field label{
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-dark);
+    margin-bottom: 6px;
+  }
+
+  .field input{
+    background-color: var(--input-bg);
+    border: 1px solid var(--input-border);
+    padding: 11px 14px;
+    font-size: 14px;
+    border-radius: 10px;
+    width: 100%;
+    outline: none;
+    color: var(--text-dark);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .field input::placeholder{
+    color: var(--placeholder);
+  }
+
+  .field input:focus{
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+  }
+
+  .forgot{
+    align-self: flex-end;
+    margin: 2px 0 18px;
+  }
+
+  .forgot a{
+    color: var(--text-muted);
+    font-size: 12.5px;
+    text-decoration: none;
+  }
+
+  .forgot a:hover{
+    color: var(--accent);
+  }
+
+  .container button.submit{
+    background-color: var(--accent);
+    color: #fff;
+    font-size: 14px;
+    padding: 12px 0;
+    border: none;
+    border-radius: 10px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    width: 100%;
+    cursor: pointer;
+    margin-top: 6px;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+  }
+
+  .container button.submit:hover{
+    background-color: var(--accent-dark);
+  }
+
+  .container button.submit:active{
+    transform: scale(0.98);
+  }
+
+  .switch-line{
+    margin-top: 20px;
+    font-size: 13px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+
+  .switch-line a{
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .switch-line a:hover{
+    text-decoration: underline;
+  }
+
+  /* ---- Sliding mechanics (from reference source) ---- */
+
+  .form-container{
+    position: absolute;
+    top: 0;
+    height: 100%;
+    width: 50%;
+    transition: all 0.6s ease-in-out;
+  }
+
+  .sign-in{
+    left: 0;
+    z-index: 2;
+  }
+
+  .container.active .sign-in{
+    transform: translateX(100%);
+  }
+
+  .sign-up{
+    left: 0;
+    opacity: 0;
+    z-index: 1;
+  }
+
+  .container.active .sign-up{
+    transform: translateX(100%);
+    opacity: 1;
+    z-index: 5;
+    animation: move 0.6s;
+  }
+
+  @keyframes move{
+    0%, 49.99%{
+      opacity: 0;
+      z-index: 1;
+    }
+    50%, 100%{
+      opacity: 1;
+      z-index: 5;
+    }
+  }
+
+  .toggle-container{
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 50%;
+    height: 100%;
+    overflow: hidden;
+    transition: all 0.6s ease-in-out;
+    border-radius: 120px 0 0 90px;
+    z-index: 1000;
+  }
+
+  .container.active .toggle-container{
+    transform: translateX(-100%);
+    border-radius: 0 120px 90px 0;
+  }
+
+  .toggle{
+    background: linear-gradient(135deg, var(--accent-light), var(--accent-dark));
+    height: 100%;
+    color: #fff;
+    position: relative;
+    left: -100%;
+    width: 200%;
+    transform: translateX(0);
+    transition: all 0.6s ease-in-out;
+  }
+
+  .container.active .toggle{
+    transform: translateX(50%);
+  }
+
+  .toggle-panel{
+    position: absolute;
+    width: 50%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    padding: 0 34px;
+    text-align: center;
+    top: 0;
+    transform: translateX(0);
+    transition: all 0.6s ease-in-out;
+  }
+
+  .toggle-panel .mini-logo{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 22px;
+  }
+
+  .toggle-panel .mini-logo span{
+    font-size: 19px;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .toggle-panel h2{
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 12px;
+  }
+
+  .toggle-panel p{
+    font-size: 13.5px;
+    line-height: 20px;
+    color: rgba(255,255,255,0.9);
+    margin-bottom: 26px;
+  }
+
+  .toggle-panel button.ghost{
+    background-color: transparent;
+    color: #fff;
+    font-size: 14px;
+    padding: 11px 38px;
+    border: 1.5px solid #fff;
+    border-radius: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  .toggle-panel button.ghost:hover{
+    background-color: #fff;
+    color: var(--accent-dark);
+  }
+
+  .toggle-left{
+    transform: translateX(-200%);
+  }
+
+  .container.active .toggle-left{
+    transform: translateX(0);
+  }
+
+  .toggle-right{
+    right: 0;
+    transform: translateX(0);
+  }
+
+  .container.active .toggle-right{
+    transform: translateX(200%);
+  }
+
+  .mobile-switch{
+    display: none;
+  }
+
+  @media (max-width: 700px){
+    .container{
+      width: 95%;
+      min-height: 640px;
+    }
+    .toggle-container{
+      display: none;
+    }
+    .form-container{
+      width: 100%;
+    }
+    .container.active .sign-in{
+      transform: translateX(0);
+      opacity: 0;
+      z-index: 1;
+      pointer-events: none;
+    }
+    .container.active .sign-up{
+      transform: translateX(0);
+    }
+    .sign-up{
+      z-index: 1;
+    }
+    .container.active .sign-up{
+      z-index: 5;
+    }
+    .mobile-switch{
+      display: block;
+    }
+  }
+</style>
+</head>
+
+<body>
+
+  <div class="container" id="container">
+
+    <!-- SIGN UP -->
+    <div class="form-container sign-up">
+      <form onsubmit="return false;">
+        <div class="logo">
+          <img src="assets/mediora-icon.png" alt="Mediora" class="logo-icon">
+          <span>Medi<em>o</em>ra</span>
+        </div>
+        <h1>Create your Mediora account</h1>
+        <p class="subtitle">Enter your details to get started</p>
+
+        <div class="field">
+          <label>Full Name</label>
+          <input type="text" placeholder="Jane Doe">
+        </div>
+        <div class="field">
+          <label>Email Address</label>
+          <input type="email" placeholder="you@example.com">
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" placeholder="••••••••">
+        </div>
+        <div class="field">
+          <label>Confirm Password</label>
+          <input type="password" placeholder="••••••••">
+        </div>
+
+        <button class="submit" type="submit">Create Account</button>
+        <p class="switch-line mobile-switch">Already have an account? <a href="#" id="mobileToLogin">Sign In</a></p>
+      </form>
+    </div>
+
+    <!-- SIGN IN -->
+    <div class="form-container sign-in">
+      <form onsubmit="return false;">
+        <div class="logo">
+          <img src="assets/mediora-icon.png" alt="Mediora" class="logo-icon">
+          <span>Medi<em>o</em>ra</span>
+        </div>
+        <h1>Welcome back to Mediora</h1>
+        <p class="subtitle">Sign in to access your health reports</p>
+
+        <div class="field">
+          <label>Email Address</label>
+          <input type="email" placeholder="you@example.com">
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" placeholder="••••••••">
+        </div>
+        <div class="forgot"><a href="#">Forgot your password?</a></div>
+
+        <button class="submit" type="submit">Sign In</button>
+        <p class="switch-line mobile-switch">Don't have an account? <a href="#" id="mobileToRegister">Sign Up</a></p>
+      </form>
+    </div>
+
+    <!-- TOGGLE / ANIMATION PANEL -->
+    <div class="toggle-container">
+      <div class="toggle">
+        <div class="toggle-panel toggle-left">
+          <div class="mini-logo">
+            <img src="assets/mediora-icon.png" alt="Mediora" class="logo-icon mini">
+            <span>Mediora</span>
+          </div>
+          <h2>Welcome Back!</h2>
+          <p>Sign in to keep track of your health reports and stay on top of your care.</p>
+          <button class="ghost" id="login">Sign In</button>
+        </div>
+        <div class="toggle-panel toggle-right">
+          <div class="mini-logo">
+            <img src="assets/mediora-icon.png" alt="Mediora" class="logo-icon mini">
+            <span>Mediora</span>
+          </div>
+          <h2>New Here?</h2>
+          <p>Create your Mediora account to get started with your health reports.</p>
+          <button class="ghost" id="register">Sign Up</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const container = document.getElementById('container');
+    const registerBtn = document.getElementById('register');
+    const loginBtn = document.getElementById('login');
+    const mobileToRegister = document.getElementById('mobileToRegister');
+    const mobileToLogin = document.getElementById('mobileToLogin');
+
+    registerBtn.addEventListener('click', () => container.classList.add('active'));
+    loginBtn.addEventListener('click', () => container.classList.remove('active'));
+    mobileToRegister.addEventListener('click', (e) => { e.preventDefault(); container.classList.add('active'); });
+    mobileToLogin.addEventListener('click', (e) => { e.preventDefault(); container.classList.remove('active'); });
+  </script>
+
+</body>
+</html>
