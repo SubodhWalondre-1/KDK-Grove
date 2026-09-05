@@ -1,0 +1,42 @@
+# Node & Frontend
+frontend/
+node_modules/
+dist/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+
+# Database & Storage
+*.db
+*.sqlite
+*.sqlite3
+mediora.db
+backend/mediora.db
+uploads/
+backend/uploads/
+
+# Env & Secrets
+.env
+.env.local
+backend/.env
+
+# Temporary Files & Docs
+context.md
+uiux.md
+*.zip
+*.rar
+*.pdf
+*.jpeg
+*.jpg
+*.png
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
