@@ -66,6 +66,12 @@ class FileTooLargeError(MedioraException):
         super().__init__(detail)
 
 
+class ProtectedReportError(MedioraException):
+
+    def __init__(self, detail: str = "Unable to generate protected report"):
+        super().__init__(detail)
+
+
 # --- Upstream / processing failures ---
 
 class OCRProcessingError(MedioraException):
@@ -89,7 +95,7 @@ class TranslationServiceError(MedioraException):
 # --- FastAPI exception handlers (register via register_exception_handlers in main.py) ---
 
 _NOT_FOUND_EXCEPTIONS = (ProfileNotFoundError, ReportNotFoundError, ShareLinkNotFoundError)
-_BAD_REQUEST_EXCEPTIONS = (InvalidFileTypeError, FileTooLargeError)
+_BAD_REQUEST_EXCEPTIONS = (InvalidFileTypeError, FileTooLargeError, ProtectedReportError)
 _UNAUTHORIZED_EXCEPTIONS = (AuthenticationError, InvalidCredentialsError)
 _UPSTREAM_EXCEPTIONS = (OCRProcessingError, LLMExtractionError, TranslationServiceError)
 

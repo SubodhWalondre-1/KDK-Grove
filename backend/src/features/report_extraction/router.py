@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, Form, UploadFile
+import logging
+from fastapi import APIRouter, Depends, Form, HTTPException, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from src.core.exceptions import ReportNotFoundError
@@ -8,12 +9,19 @@ from src.models.profile import Profile
 from src.models.reference_range import ReferenceRange
 from src.models.user import User
 from src.features.report_extraction import service as report_service
+from src.features.report_extraction.pdf_protection import (
+    build_or_get_report_pdf,
+    encrypt_pdf,
+    generate_pdf_password,
+)
 from src.schemas.report import (
     ReportCorrectionRequest,
     ReportDetailResponse,
     ReportStatusResponse,
     ReportUploadResponse,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 root_router = APIRouter(prefix="/reports", tags=["reports"])
@@ -92,6 +100,49 @@ def reprocess_report(
 ):
     report = report_service.reprocess_report(db, report_id)
     return ReportStatusResponse(report_id=report.id, status=report.status)
+
+
+@router.get("/{report_id}/download")
+@root_router.get("/{report_id}/download")
+def download_protected_report(
+    report_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Download password-protected report PDF.
+
+    Password Rule: FIRST 4 CHARACTERS OF NAME (UPPERCASE) + 4-DIGIT BIRTH YEAR.
+    """
+    logger.info("Encrypted PDF download requested for report_id=%s by user_id=%s", report_id, current_user.id)
+    report = db.query(report_service.Report).filter(report_service.Report.id == report_id).first()
+    if report is None:
+        raise ReportNotFoundError(detail=f"Report {report_id} not found")
+
+    profile = report.profile
+    if profile is None:
+        raise HTTPException(status_code=400, detail="Report has no associated patient profile.")
+
+    if profile.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Forbidden: You do not own this report's profile")
+
+    # Generate patient password (NEVER logged or stored in database)
+    password = generate_pdf_password(profile.profile_name, profile.date_of_birth)
+
+    # Obtain original or dynamically generated PDF bytes
+    raw_pdf_bytes = build_or_get_report_pdf(report)
+
+    # Encrypt PDF bytes with user password
+    encrypted_bytes = encrypt_pdf(raw_pdf_bytes, password)
+
+    logger.info("Encrypted PDF generated successfully for report_id=%s", report_id)
+    return Response(
+        content=encrypted_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="Mediora_Report_{report_id}.pdf"',
+            "Content-Type": "application/pdf",
+        },
+    )
 
 
 @reference_router.get("/reference-ranges", tags=["debug"])
