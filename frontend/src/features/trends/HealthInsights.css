@@ -558,6 +558,29 @@
   flex-shrink: 0;
 }
 
+.health-insights-page .panel-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 11px 18px;
+  background: #fafbfe;
+  border: none;
+  border-top: 1px solid var(--hi-border);
+  color: var(--hi-accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.health-insights-page .panel-toggle-btn:hover {
+  background: var(--hi-accent-soft);
+  color: var(--hi-accent-dark);
+}
+
 /* Bottom Grid (Lab Trends + Latest Report) */
 .health-insights-page .bottom-grid {
   display: grid;
