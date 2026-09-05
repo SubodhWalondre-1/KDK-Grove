@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Sparkles, Loader2, RefreshCw, AlertCircle, HeartPulse } from 'lucide-react';
+import { Sparkles, Loader2, RefreshCw, AlertCircle, AlertTriangle, HeartPulse, Download, CheckCircle2 } from 'lucide-react';
 import PageLayout from '../../components/layout/PageLayout';
 import UrgentCareBanner from './components/UrgentCareBanner';
 import InsightsView from './components/InsightsView';
 import { getRecommendations, generateRecommendations } from '../../api/recommendationsApi';
+import { downloadReportPdf } from '../../api/reportsApi';
+import { extractFilenameFromDisposition, downloadBlob, getDownloadErrorMessage } from '../../utils/helpers';
 import { colors } from '../../theme/colors';
 
 export default function RecommendationsPage() {
@@ -13,6 +15,11 @@ export default function RecommendationsPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
+
+  // Download state
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
 
   const fetchRecommendations = async () => {
     setLoading(true);
@@ -46,6 +53,32 @@ export default function RecommendationsPage() {
     }
   };
 
+  const handleDownloadReport = async () => {
+    if (downloading) return;
+    if (!reportId) return;
+
+    setDownloading(true);
+    setDownloadError('');
+    setDownloadSuccess(false);
+
+    try {
+      const response = await downloadReportPdf(reportId);
+      const disposition = response.headers?.['content-disposition'] || response.headers?.['Content-Disposition'];
+      const filename = extractFilenameFromDisposition(
+        disposition,
+        `Mediora_Report_${reportId}.pdf`
+      );
+      downloadBlob(response.data, filename);
+      setDownloadSuccess(true);
+      setTimeout(() => setDownloadSuccess(false), 6000);
+    } catch (err) {
+      const msg = await getDownloadErrorMessage(err);
+      setDownloadError(msg);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <PageLayout>
       <div
@@ -62,6 +95,8 @@ export default function RecommendationsPage() {
             alignItems: 'center',
             justifyContent: 'space-between',
             marginBottom: '24px',
+            flexWrap: 'wrap',
+            gap: '12px',
           }}
         >
           <div>
@@ -84,10 +119,10 @@ export default function RecommendationsPage() {
             </p>
           </div>
 
-          {data?.has_been_generated && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
-              onClick={() => handleGenerate(true)}
-              disabled={generating}
+              onClick={handleDownloadReport}
+              disabled={downloading}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -95,19 +130,138 @@ export default function RecommendationsPage() {
                 padding: '8px 14px',
                 fontSize: '13px',
                 fontWeight: 600,
-                color: colors.primary,
-                backgroundColor: 'rgba(79, 70, 229, 0.08)',
-                border: '1px solid rgba(79, 70, 229, 0.2)',
+                color: '#FFFFFF',
+                background: downloading
+                  ? '#64748B'
+                  : 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
+                border: 'none',
                 borderRadius: '8px',
-                cursor: generating ? 'not-allowed' : 'pointer',
+                cursor: downloading ? 'not-allowed' : 'pointer',
                 fontFamily: 'Poppins, sans-serif',
+                opacity: downloading ? 0.85 : 1,
+                boxShadow: downloading ? 'none' : '0 2px 6px rgba(79, 70, 229, 0.25)',
+                transition: 'all 0.2s ease',
+              }}
+              title="Download password-protected report PDF"
+            >
+              {downloading ? (
+                <>
+                  <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                  <span>Downloading...</span>
+                </>
+              ) : downloadSuccess ? (
+                <>
+                  <CheckCircle2 size={14} />
+                  <span>Downloaded!</span>
+                </>
+              ) : (
+                <>
+                  <Download size={14} />
+                  <span>Download PDF</span>
+                </>
+              )}
+            </button>
+
+            {data?.has_been_generated && (
+              <button
+                onClick={() => handleGenerate(true)}
+                disabled={generating}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 14px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  color: colors.primary,
+                  backgroundColor: 'rgba(79, 70, 229, 0.08)',
+                  border: '1px solid rgba(79, 70, 229, 0.2)',
+                  borderRadius: '8px',
+                  cursor: generating ? 'not-allowed' : 'pointer',
+                  fontFamily: 'Poppins, sans-serif',
+                }}
+              >
+                <RefreshCw size={14} style={{ animation: generating ? 'spin 1s linear infinite' : 'none' }} />
+                <span>{generating ? 'Regenerating...' : 'Regenerate'}</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Download Feedback Banners */}
+        {downloadError && (
+          <div
+            style={{
+              marginBottom: '20px',
+              padding: '12px 16px',
+              backgroundColor: 'rgba(239, 68, 68, 0.08)',
+              border: '1px solid rgba(239, 68, 68, 0.2)',
+              borderRadius: '12px',
+              color: colors.danger,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontSize: '14px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AlertTriangle size={18} />
+              <span>{downloadError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDownloadError('')}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: colors.danger,
+                cursor: 'pointer',
+                fontWeight: 600,
+                fontSize: '18px',
+                padding: '0 4px',
               }}
             >
-              <RefreshCw size={14} style={{ animation: generating ? 'spin 1s linear infinite' : 'none' }} />
-              <span>{generating ? 'Regenerating...' : 'Regenerate'}</span>
+              ×
             </button>
-          )}
-        </div>
+          </div>
+        )}
+
+        {downloadSuccess && (
+          <div
+            style={{
+              marginBottom: '20px',
+              padding: '12px 16px',
+              backgroundColor: 'rgba(16, 185, 129, 0.08)',
+              border: '1px solid rgba(16, 185, 129, 0.2)',
+              borderRadius: '12px',
+              color: '#059669',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontSize: '14px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <CheckCircle2 size={18} />
+              <span>Encrypted report downloaded successfully. Enter your password in your PDF viewer to open it.</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDownloadSuccess(false)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#059669',
+                cursor: 'pointer',
+                fontWeight: 600,
+                fontSize: '18px',
+                padding: '0 4px',
+              }}
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         {/* Loading State */}
         {loading ? (

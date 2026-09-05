@@ -27,6 +27,8 @@ import { formatTestDisplayName } from '../../utils/formatters';
 import StatusBadge from '../../components/StatusBadge';
 import { getDashboard, getProfileReports } from '../../api/dashboardApi';
 import { getRecommendations, generateRecommendations } from '../../api/recommendationsApi';
+import { downloadReportPdf } from '../../api/reportsApi';
+import { extractFilenameFromDisposition, downloadBlob, getDownloadErrorMessage } from '../../utils/helpers';
 import { useProfileStore } from '../../store/profileStore';
 import { useTranslation } from '../../i18n/translations';
 import { colors } from '../../theme/colors';
@@ -53,6 +55,11 @@ export default function DashboardPage() {
 
   // Share modal state
   const [shareModalOpen, setShareModalOpen] = useState(false);
+
+  // Download report state
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -125,8 +132,33 @@ export default function DashboardPage() {
     }
   };
 
-  const handleDownloadReport = () => {
-    window.print();
+  const handleDownloadReport = async () => {
+    if (downloading) return;
+    if (!reportId) {
+      setDownloadError('No report ID specified.');
+      return;
+    }
+
+    setDownloading(true);
+    setDownloadError('');
+    setDownloadSuccess(false);
+
+    try {
+      const response = await downloadReportPdf(reportId);
+      const disposition = response.headers?.['content-disposition'] || response.headers?.['Content-Disposition'];
+      const filename = extractFilenameFromDisposition(
+        disposition,
+        `Mediora_Report_${reportId}.pdf`
+      );
+      downloadBlob(response.data, filename);
+      setDownloadSuccess(true);
+      setTimeout(() => setDownloadSuccess(false), 6000);
+    } catch (err) {
+      const message = await getDownloadErrorMessage(err);
+      setDownloadError(message);
+    } finally {
+      setDownloading(false);
+    }
   };
 
   const handleSelectReport = (targetId) => {
@@ -361,6 +393,7 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={handleDownloadReport}
+              disabled={downloading}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -369,20 +402,112 @@ export default function DashboardPage() {
                 fontSize: '14px',
                 fontWeight: 600,
                 color: '#FFFFFF',
-                background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
+                background: downloading
+                  ? '#64748B'
+                  : 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
                 border: 'none',
                 borderRadius: '12px',
-                cursor: 'pointer',
-                boxShadow: '0 4px 12px rgba(79, 70, 229, 0.25)',
+                cursor: downloading ? 'not-allowed' : 'pointer',
+                boxShadow: downloading ? 'none' : '0 4px 12px rgba(79, 70, 229, 0.25)',
                 transition: 'all 0.2s ease',
                 fontFamily: 'Poppins, sans-serif',
+                opacity: downloading ? 0.85 : 1,
               }}
             >
-              <Download size={18} />
-              <span>{t('download_report_btn')}</span>
+              {downloading ? (
+                <>
+                  <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} />
+                  <span>Downloading...</span>
+                </>
+              ) : downloadSuccess ? (
+                <>
+                  <CheckCircle2 size={18} />
+                  <span>Downloaded!</span>
+                </>
+              ) : (
+                <>
+                  <Download size={18} />
+                  <span>{t('download_report_btn')}</span>
+                </>
+              )}
             </button>
           </div>
         </div>
+
+        {/* Download Feedback Banners */}
+        {downloadError && (
+          <div
+            style={{
+              marginBottom: '20px',
+              padding: '12px 16px',
+              backgroundColor: 'rgba(239, 68, 68, 0.08)',
+              border: '1px solid rgba(239, 68, 68, 0.2)',
+              borderRadius: '12px',
+              color: colors.danger,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontSize: '14px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AlertTriangle size={18} />
+              <span>{downloadError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDownloadError('')}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: colors.danger,
+                cursor: 'pointer',
+                fontWeight: 600,
+                fontSize: '18px',
+                padding: '0 4px',
+              }}
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+        {downloadSuccess && (
+          <div
+            style={{
+              marginBottom: '20px',
+              padding: '12px 16px',
+              backgroundColor: 'rgba(16, 185, 129, 0.08)',
+              border: '1px solid rgba(16, 185, 129, 0.2)',
+              borderRadius: '12px',
+              color: '#059669',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontSize: '14px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <CheckCircle2 size={18} />
+              <span>Encrypted report downloaded successfully. Enter your password in your PDF viewer to open it.</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDownloadSuccess(false)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#059669',
+                cursor: 'pointer',
+                fontWeight: 600,
+                fontSize: '18px',
+                padding: '0 4px',
+              }}
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         {/* 4 KPI Metric Cards Row */}
         <TopMetricCardsRow
