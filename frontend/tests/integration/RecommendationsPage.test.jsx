@@ -37,8 +37,8 @@ describe('RecommendationsPage Integration Tests', () => {
 
     renderComponent();
 
-    expect(await screen.findByText(/no recommendations generated yet/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /generate my recommendations/i })).toBeInTheDocument();
+    expect(await screen.findByText(/no insights generated yet/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /generate ai insights/i })).toBeInTheDocument();
   });
 
   it('clicking Generate shows a loading state, then renders RecommendationTabs + LifestyleSuggestionsCard on success', async () => {
@@ -60,29 +60,45 @@ describe('RecommendationsPage Integration Tests', () => {
       has_been_generated: true,
       is_urgent: false,
       urgent_care_message: null,
-      diet: ['Eat leafy greens'],
-      foods_to_avoid: ['Avoid processed sugars'],
-      exercise: ['Walk 30 mins daily'],
-      lifestyle: ['Drink 2L water daily'],
-      severity_gate: 'normal',
-      generated_at: '2026-08-01T00:00:00Z',
+      summary: { attention: 1, monitoring: 0, normal: 0 },
+      findings: [
+        {
+          id: 1,
+          parameter: 'Glucose',
+          value: '140',
+          unit: 'mg/dL',
+          reference_range: '70-99',
+          status: 'high',
+          clinical_significance: 'Elevated fasting glucose indicates prediabetes.',
+        },
+      ],
+      recommendations: [
+        {
+          id: 1,
+          finding_title: 'Glucose (High)',
+          priority: 'attention',
+          guidance: 'Eat leafy greens and avoid processed sugars.',
+          action_items: [
+            { id: 'a1', title: 'Daily Wellness Checklist', description: 'Drink 2L water daily' },
+          ],
+        },
+      ],
+      sources: [],
     };
 
     recommendationsApi.generateRecommendations.mockResolvedValueOnce(generatedResponse);
 
     renderComponent();
 
-    const generateBtn = await screen.findByRole('button', { name: /generate my recommendations/i });
+    const generateBtn = await screen.findByRole('button', { name: /generate ai insights/i });
     fireEvent.click(generateBtn);
 
     // Verify loading state
-    expect(screen.getByText(/analyzing report & synthesizing guidance/i)).toBeInTheDocument();
+    expect(screen.getByText(/analyzing findings & retrieving evidence/i)).toBeInTheDocument();
 
-    // Verify rendered tabs and lifestyle card
-    expect(await screen.findByText('Eat leafy greens')).toBeInTheDocument();
-    expect(screen.getByText('Avoid processed sugars')).toBeInTheDocument();
-    expect(screen.getByText('Daily Wellness Checklist')).toBeInTheDocument();
-    expect(screen.getByText('Drink 2L water daily')).toBeInTheDocument();
+    // Verify rendered findings
+    expect(await screen.findByText('Glucose')).toBeInTheDocument();
+    expect(screen.getByText(/140/)).toBeInTheDocument();
   });
 
   it('when response has is_urgent=true, renders UrgentCareBanner instead of RecommendationTabs', async () => {
