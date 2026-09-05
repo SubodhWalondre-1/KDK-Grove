@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: mediora-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt && python seed_scripts/seed_reference_ranges.py && python seed_scripts/seed_test_aliases.py && python seed_scripts/seed_glossary.py
+    startCommand: uvicorn src.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    plan: free
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DATABASE_URL
+        value: sqlite:///./mediora.db
+      - key: UPLOAD_DIR
+        value: ./uploads
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: JWT_EXPIRY_MINUTES
+        value: "1440"
+      - key: ADMIN_API_KEY
+        generateValue: true
+      - key: FRONTEND_BASE_URL
+        value: https://your-frontend.vercel.app
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: SARVAM_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
