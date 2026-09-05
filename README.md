@@ -1,4 +1,4 @@
-# Mediora — Medical Report Simplifier
+# Mediora - Medical Report Simplifier
 
 > **K.D.K. COLLEGE OF ENGINEERING, NAGPUR**  
 > *(An Autonomous Institute, Accredited by NAAC and NBA)*  
