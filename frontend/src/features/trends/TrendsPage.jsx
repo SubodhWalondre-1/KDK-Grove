@@ -9,6 +9,8 @@ import {
   Loader2,
   Users,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Sparkles,
   Utensils,
   CheckCircle2,
@@ -34,13 +36,14 @@ import {
   formatDate,
 } from '../../utils/helpers';
 import { useProfileStore } from '../../store/profileStore';
+import { useTranslation } from '../../i18n/translations';
 import { formatTestDisplayName } from '../../utils/formatters';
 import './HealthInsights.css';
 
 /**
  * Semicircle SVG Gauge (Green normal arc + Red attention arc)
  */
-function HealthOverviewGauge({ pct = 87, greenColor = '#6fcf6f', redColor = '#ff5c5c' }) {
+function HealthOverviewGauge({ pct = 87, greenColor = '#6fcf6f', redColor = '#ff5c5c', label = 'Overall Health' }) {
   const w = 210;
   const h = 118;
   const cx = 105;
@@ -95,7 +98,7 @@ function HealthOverviewGauge({ pct = 87, greenColor = '#6fcf6f', redColor = '#ff
       </svg>
       <div className="gauge-label">
         <div className="pct">{clampedPct}%</div>
-        <div className="cap">Overall Health</div>
+        <div className="cap">{label}</div>
       </div>
     </div>
   );
@@ -241,6 +244,7 @@ function LabTrendSvgChart({ points = [], sparkline = [] }) {
 }
 
 export default function TrendsPage() {
+  const { t } = useTranslation();
   const { profileId } = useParams();
   const navigate = useNavigate();
 
@@ -265,6 +269,10 @@ export default function TrendsPage() {
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState('');
   const [downloadSuccess, setDownloadSuccess] = useState(false);
+
+  // List collapse / show more states
+  const [showAllNeedsImprovement, setShowAllNeedsImprovement] = useState(false);
+  const [showAllDoingWell, setShowAllDoingWell] = useState(false);
 
   // Fetch trend overview data
   useEffect(() => {
@@ -544,21 +552,21 @@ export default function TrendsPage() {
       }`
     : isPet
     ? 'Animal Patient (dog)'
-    : 'Active Patient';
+    : t('active_patient', 'Active Patient');
 
   // Empty state when no test parameters exist
   if (!loading && tests.length === 0) {
     return (
       <PageLayout>
         <div className="health-insights-page">
-          <div className="eyebrow">HEALTH INSIGHTS</div>
+          <div className="eyebrow">{t('health_insights_eyebrow', 'HEALTH INSIGHTS')}</div>
           <div className="page-head">
             <div>
-              <h1>Health Insights</h1>
+              <h1>{t('health_insights_title', 'Health Insights')}</h1>
               <p>
                 {isPet
-                  ? "Understand your pet's health journey with simple insights from lab reports."
-                  : 'Understand your health journey with simple insights from lab reports.'}
+                  ? t('health_insights_sub_pet', "Understand your pet's health journey with simple insights from lab reports.")
+                  : t('health_insights_sub', 'Understand your health journey with simple insights from lab reports.')}
               </p>
             </div>
           </div>
@@ -588,13 +596,13 @@ export default function TrendsPage() {
               <Activity size={26} />
             </div>
             <h3 style={{ fontSize: '19px', fontWeight: 700, margin: '0 0 8px' }}>
-              No trend data available yet
+              {t('no_trend_data', 'No trend data available yet')}
             </h3>
             <p style={{ fontSize: '14px', color: '#64748B', margin: '0 0 24px' }}>
-              Upload more reports to start seeing health trends and parameter trajectories over time.
+              {t('upload_more_reports_notice', 'Upload more reports to start seeing health trends and parameter trajectories over time.')}
             </p>
             <Link to="/upload" className="btn-primary" style={{ display: 'inline-flex' }}>
-              Upload Report
+              {t('nav_upload', 'Upload Report')}
             </Link>
           </div>
         </div>
@@ -609,16 +617,16 @@ export default function TrendsPage() {
     <PageLayout>
       <div className="health-insights-page">
         {/* EYEBROW */}
-        <div className="eyebrow">HEALTH INSIGHTS</div>
+        <div className="eyebrow">{t('health_insights_eyebrow', 'HEALTH INSIGHTS')}</div>
 
         {/* PAGE HEADER */}
         <div className="page-head">
           <div>
-            <h1>Health Insights</h1>
+            <h1>{t('health_insights_title', 'Health Insights')}</h1>
             <p>
               {isPet
-                ? "Understand your pet's health journey with simple insights from lab reports."
-                : 'Understand your health journey with simple insights from lab reports.'}
+                ? t('health_insights_sub_pet', "Understand your pet's health journey with simple insights from lab reports.")
+                : t('health_insights_sub', 'Understand your health journey with simple insights from lab reports.')}
             </p>
           </div>
 
@@ -634,7 +642,7 @@ export default function TrendsPage() {
               </div>
               <div className="p-text">
                 <b>{patientTitle}</b>
-                <span>Active Patient</span>
+                <span>{t('active_patient', 'Active Patient')}</span>
               </div>
             </Link>
 
@@ -649,17 +657,17 @@ export default function TrendsPage() {
               {downloading ? (
                 <>
                   <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
-                  <span>Downloading...</span>
+                  <span>{t('downloading', 'Downloading...')}</span>
                 </>
               ) : downloadSuccess ? (
                 <>
                   <CheckCircle2 size={16} color="#3FA34D" />
-                  <span style={{ color: '#3FA34D' }}>Downloaded!</span>
+                  <span style={{ color: '#3FA34D' }}>{t('downloaded', 'Downloaded!')}</span>
                 </>
               ) : (
                 <>
                   <Download size={16} />
-                  <span>Download</span>
+                  <span>{t('download', 'Download')}</span>
                 </>
               )}
             </button>
@@ -674,7 +682,7 @@ export default function TrendsPage() {
               title="Generate and manage secure shareable links"
             >
               <Share2 size={16} />
-              <span>Share Link</span>
+              <span>{t('share_link', 'Share Link')}</span>
             </button>
           </div>
         </div>
@@ -783,7 +791,7 @@ export default function TrendsPage() {
                 <Activity size={22} />
               </div>
               <div>
-                <h2>Health Overview</h2>
+                <h2>{t('health_overview_title', 'Health Overview')}</h2>
                 <p>
                   Based on {reportCount} completed lab report{reportCount !== 1 ? 's' : ''} • Overall Health Score Trend:{' '}
                   <b>{hsTrend?.latest_score != null ? `${Math.round(hsTrend.latest_score)}/100` : '—'}</b>
@@ -794,7 +802,7 @@ export default function TrendsPage() {
 
           <div className="overview-body">
             <div className="gauge-wrap">
-              <HealthOverviewGauge pct={healthScore} />
+              <HealthOverviewGauge pct={healthScore} label={t('overall_health', 'Overall Health')} />
               <div className="gauge-legend">
                 <div className="stat-widget green">
                   <div className="stat-icon">
@@ -802,7 +810,7 @@ export default function TrendsPage() {
                   </div>
                   <div>
                     <b>{pctNormal}%</b>
-                    <span>Parameters normal</span>
+                    <span>{t('parameters_normal', 'Parameters normal')}</span>
                   </div>
                 </div>
 
@@ -812,7 +820,7 @@ export default function TrendsPage() {
                   </div>
                   <div>
                     <b>{pctAttention}%</b>
-                    <span>Needs attention</span>
+                    <span>{t('needs_attention', 'Needs attention')}</span>
                   </div>
                 </div>
               </div>
@@ -820,7 +828,7 @@ export default function TrendsPage() {
 
             <div className="overview-note">
               <p>
-                Overall health is stable, with recent parameter trajectories tracked across completed clinical reports.
+                {t('overall_health_stable', 'Overall health is stable, with recent parameter trajectories tracked across completed clinical reports.')}
               </p>
               <div
                 className={`trend-chip ${
@@ -840,10 +848,10 @@ export default function TrendsPage() {
                 )}
                 <span>
                   {hsTrend?.direction === 'decreasing'
-                    ? 'Trending down over recent reports'
+                    ? t('trend_down', 'Trending down over recent reports')
                     : hsTrend?.direction === 'increasing'
-                    ? 'Trending upward and improving'
-                    : 'Stable across recent reports'}
+                    ? t('trend_up', 'Trending upward and improving')
+                    : t('trend_stable', 'Stable across recent reports')}
                 </span>
               </div>
             </div>
@@ -857,8 +865,8 @@ export default function TrendsPage() {
               <Sparkles size={19} />
             </div>
             <div>
-              <h2>Key Findings</h2>
-              <p>Most important parameters from your latest reports</p>
+              <h2>{t('key_findings', 'Key Findings')}</h2>
+              <p>{t('key_findings_sub', 'Most important parameters from your latest reports')}</p>
             </div>
           </div>
           <button
@@ -869,7 +877,7 @@ export default function TrendsPage() {
             }
           >
             <Utensils size={16} />
-            <span>Diet Recommendation</span>
+            <span>{t('diet_recommendation', 'Diet Recommendation')}</span>
           </button>
         </div>
 
@@ -882,7 +890,7 @@ export default function TrendsPage() {
                 <div className="panel-icon red">
                   <AlertTriangle size={18} />
                 </div>
-                <h3>Needs Improvement</h3>
+                <h3>{t('needs_improvement', 'Needs Improvement')}</h3>
               </div>
               <span className="panel-count red">
                 {needsImprovement.length > 0 ? needsImprovement.length : 0}
@@ -890,7 +898,7 @@ export default function TrendsPage() {
             </div>
             <div className="panel-list">
               {needsImprovement.length > 0 ? (
-                needsImprovement.map((item, idx) => (
+                (showAllNeedsImprovement ? needsImprovement : needsImprovement.slice(0, 4)).map((item, idx) => (
                   <div
                     key={idx}
                     className="panel-row"
@@ -902,28 +910,42 @@ export default function TrendsPage() {
                   >
                     <div className="row-bar red" />
                     <div className="row-main">
-                      <div className="name">{formatTestDisplayName(item.test_name)}</div>
-                      <div className="note">
-                        {item.direction === 'decreasing'
-                          ? 'Trending down over recent reports. Consider monitoring.'
-                          : 'Slightly outside typical range. Consider monitoring.'}
-                      </div>
+                      <div className="name">{t(item.test_name, formatTestDisplayName(item.test_name))}</div>
                     </div>
                     <div className="row-value">
                       {item.latest_value} {item.latest_unit || ''}
                     </div>
                     <span className="status-pill review">
-                      {item.direction === 'decreasing' ? 'Decreasing' : 'Review'}
+                      {item.direction === 'decreasing' ? t('status_decreasing', 'Decreasing') : t('status_review', 'Review')}
                     </span>
                     <ChevronRight size={16} className="row-chevron" />
                   </div>
                 ))
               ) : (
                 <div style={{ padding: '24px', textAlign: 'center', color: '#64748B', fontSize: '13px' }}>
-                  All tracked parameters are currently within normal range.
+                  {t('all_parameters_normal', 'All tracked parameters are currently within normal range.')}
                 </div>
               )}
             </div>
+            {needsImprovement.length > 4 && (
+              <button
+                type="button"
+                className="panel-toggle-btn"
+                onClick={() => setShowAllNeedsImprovement(!showAllNeedsImprovement)}
+              >
+                {showAllNeedsImprovement ? (
+                  <>
+                    <span>{t('show_less', 'Show Less')}</span>
+                    <ChevronUp size={15} />
+                  </>
+                ) : (
+                  <>
+                    <span>{t('show_more_count', 'Show More (+{count} more)', { count: needsImprovement.length - 4 })}</span>
+                    <ChevronDown size={15} />
+                  </>
+                )}
+              </button>
+            )}
           </div>
 
           {/* Panel 2: Doing Well */}
@@ -933,7 +955,7 @@ export default function TrendsPage() {
                 <div className="panel-icon green">
                   <CheckCircle2 size={18} />
                 </div>
-                <h3>Doing Well</h3>
+                <h3>{t('doing_well', 'Doing Well')}</h3>
               </div>
               <span className="panel-count green">
                 {doingWell.length > 0 ? doingWell.length : 0}
@@ -941,7 +963,7 @@ export default function TrendsPage() {
             </div>
             <div className="panel-list">
               {doingWell.length > 0 ? (
-                doingWell.map((item, idx) => (
+                (showAllDoingWell ? doingWell : doingWell.slice(0, 4)).map((item, idx) => (
                   <div
                     key={idx}
                     className="panel-row"
@@ -953,22 +975,40 @@ export default function TrendsPage() {
                   >
                     <div className="row-bar green" />
                     <div className="row-main">
-                      <div className="name">{formatTestDisplayName(item.test_name)}</div>
-                      <div className="note">Within normal clinical reference range</div>
+                      <div className="name">{t(item.test_name, formatTestDisplayName(item.test_name))}</div>
                     </div>
                     <div className="row-value">
                       {item.latest_value} {item.latest_unit || ''}
                     </div>
-                    <span className="status-pill normal">Normal</span>
+                    <span className="status-pill normal">{t('status_normal', 'Normal')}</span>
                     <ChevronRight size={16} className="row-chevron" />
                   </div>
                 ))
               ) : (
                 <div style={{ padding: '24px', textAlign: 'center', color: '#64748B', fontSize: '13px' }}>
-                  No normal parameters recorded yet.
+                  {t('no_normal_parameters', 'No normal parameters recorded yet.')}
                 </div>
               )}
             </div>
+            {doingWell.length > 4 && (
+              <button
+                type="button"
+                className="panel-toggle-btn"
+                onClick={() => setShowAllDoingWell(!showAllDoingWell)}
+              >
+                {showAllDoingWell ? (
+                  <>
+                    <span>{t('show_less', 'Show Less')}</span>
+                    <ChevronUp size={15} />
+                  </>
+                ) : (
+                  <>
+                    <span>{t('show_more_count', 'Show More (+{count} more)', { count: doingWell.length - 4 })}</span>
+                    <ChevronDown size={15} />
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </div>
 
@@ -982,14 +1022,14 @@ export default function TrendsPage() {
                   <HeartPulse size={20} />
                 </div>
                 <div>
-                  <h3>Lab Trends</h3>
-                  <p>Track how your key health parameters change over time</p>
+                  <h3>{t('lab_trends', 'Lab Trends')}</h3>
+                  <p>{t('lab_trends_sub', 'Track how your key health parameters change over time')}</p>
                 </div>
               </div>
 
               <div className="selects">
                 <div className="select-group">
-                  <label htmlFor="trend-parameter-select">Parameter</label>
+                  <label htmlFor="trend-parameter-select">{t('parameter', 'Parameter')}</label>
                   <select
                     id="trend-parameter-select"
                     className="select-box"
@@ -997,9 +1037,9 @@ export default function TrendsPage() {
                     onChange={(e) => setSelectedTest(e.target.value)}
                     aria-label="Select trend parameter"
                   >
-                    {tests.map((t, idx) => (
-                      <option key={idx} value={t.test_name}>
-                        {formatTestDisplayName(t.test_name)} (Trend)
+                    {tests.map((tItem, idx) => (
+                      <option key={idx} value={tItem.test_name}>
+                        {t(tItem.test_name, formatTestDisplayName(tItem.test_name))} ({t('trend', 'Trend')})
                       </option>
                     ))}
                   </select>
@@ -1018,7 +1058,9 @@ export default function TrendsPage() {
               <Info size={18} style={{ flexShrink: 0 }} />
               <span>
                 {trendInsight ||
-                  `${formatTestDisplayName(selectedTest || 'Parameter')} levels have been relatively stable across recent completed reports.`}
+                  t('parameter_stable_insight', '{param} levels have been relatively stable across recent completed reports.', {
+                    param: t(selectedTest, formatTestDisplayName(selectedTest || 'Parameter')),
+                  })}
               </span>
             </div>
           </div>
@@ -1030,8 +1072,8 @@ export default function TrendsPage() {
                 <FileText size={20} />
               </div>
               <div>
-                <h3>Latest Report</h3>
-                <p>Your most recent lab report summary</p>
+                <h3>{t('latest_report', 'Latest Report')}</h3>
+                <p>{t('latest_report_sub', 'Your most recent lab report summary')}</p>
               </div>
             </div>
 
@@ -1042,15 +1084,15 @@ export default function TrendsPage() {
                   <Calendar size={18} />
                 </div>
                 <div>
-                  <b>Report Date</b>
+                  <b>{t('report_date_label', 'Report Date')}</b>
                   <span className="sub">
                     {latestDashboard?.report_date
                       ? formatDate(latestDashboard.report_date)
-                      : 'Latest Available'}
+                      : t('latest_available', 'Latest Available')}
                   </span>
                 </div>
               </div>
-              <span className="status-done">Completed</span>
+              <span className="status-done">{t('status_completed', 'Completed')}</span>
             </div>
 
             {/* Report Parameter List */}
@@ -1072,12 +1114,12 @@ export default function TrendsPage() {
                 const reportLabel = displayName === 'Hemoglobin' ? 'Hemoglobin (Hb)' : displayName;
                 return (
                   <div key={idx} className="r-row">
-                    <span className="r-name">{reportLabel}</span>
+                    <span className="r-name">{t(displayName, reportLabel)}</span>
                     <span className="r-val">
                       {pVal} {pUnit}
                     </span>
                     <span className={`status-pill ${isNormal ? 'normal' : 'review'}`}>
-                      {isNormal ? 'Normal' : 'Review'}
+                      {isNormal ? t('status_normal', 'Normal') : t('status_review', 'Review')}
                     </span>
                   </div>
                 );
@@ -1085,18 +1127,26 @@ export default function TrendsPage() {
             </div>
 
             {/* View Full Report Button */}
-            <button
-              type="button"
-              className="view-report-btn"
-              onClick={() => {
-                if (latestReportId) {
-                  navigate(`/reports/${latestReportId}/dashboard`);
-                }
-              }}
-            >
-              <span>View Full Report</span>
-              <ChevronRight size={16} />
-            </button>
+            {(() => {
+              const reportId = latestReportId || overview?.latest_report_id;
+              return (
+                <button
+                  type="button"
+                  className="view-report-btn"
+                  disabled={!reportId}
+                  title={!reportId ? 'No report available yet' : undefined}
+                  onClick={() => {
+                    if (reportId) {
+                      navigate(`/reports/${reportId}/dashboard`);
+                    }
+                  }}
+                  style={!reportId ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+                >
+                  <span>{t('view_full_report', 'View Full Report')}</span>
+                  <ChevronRight size={16} />
+                </button>
+              );
+            })()}
           </div>
         </div>
 

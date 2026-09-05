@@ -15,6 +15,7 @@ import {
   Info,
 } from 'lucide-react';
 import { colors } from '../../../theme/colors';
+import { useTranslation } from '../../../i18n/translations';
 
 const PRIORITY_CONFIG = {
   attention: {
@@ -22,7 +23,8 @@ const PRIORITY_CONFIG = {
     bg: 'rgba(239, 68, 68, 0.08)',
     border: 'rgba(239, 68, 68, 0.2)',
     icon: AlertTriangle,
-    label: 'Needs Attention',
+    key: 'needs_attention',
+    defaultLabel: 'Needs Attention',
     dot: '🔴',
   },
   monitoring: {
@@ -30,7 +32,8 @@ const PRIORITY_CONFIG = {
     bg: 'rgba(245, 158, 11, 0.08)',
     border: 'rgba(245, 158, 11, 0.2)',
     icon: AlertCircle,
-    label: 'Needs Monitoring',
+    key: 'needs_monitoring',
+    defaultLabel: 'Needs Monitoring',
     dot: '🟡',
   },
   normal: {
@@ -38,12 +41,15 @@ const PRIORITY_CONFIG = {
     bg: 'rgba(16, 185, 129, 0.08)',
     border: 'rgba(16, 185, 129, 0.2)',
     icon: CheckCircle2,
-    label: 'Within Range',
+    key: 'within_range',
+    defaultLabel: 'Within Range',
     dot: '🟢',
   },
 };
 
 function SummaryBar({ summary }) {
+  const { t } = useTranslation();
+  const totalAnalyzed = (summary?.attention || 0) + (summary?.monitoring || 0) + (summary?.normal || 0);
   const items = [
     { key: 'attention', count: summary?.attention || 0, ...PRIORITY_CONFIG.attention },
     { key: 'monitoring', count: summary?.monitoring || 0, ...PRIORITY_CONFIG.monitoring },
@@ -74,10 +80,10 @@ function SummaryBar({ summary }) {
             letterSpacing: '0.04em',
           }}
         >
-          Report Summary
+          {t('report_summary', 'Report Summary')}
         </h3>
         <p style={{ fontSize: '12px', color: '#94A3B8', margin: 0 }}>
-          {(summary?.attention || 0) + (summary?.monitoring || 0) + (summary?.normal || 0)} parameters analyzed
+          {t('parameters_analyzed', '{count} parameters analyzed', { count: totalAnalyzed })}
         </p>
       </div>
 
@@ -101,7 +107,7 @@ function SummaryBar({ summary }) {
               {item.count}
             </div>
             <div style={{ fontSize: '11px', fontWeight: 600, color: item.color }}>
-              {item.label}
+              {t(item.key, item.defaultLabel)}
             </div>
           </div>
         </div>
@@ -110,8 +116,9 @@ function SummaryBar({ summary }) {
   );
 }
 
-function FindingCard({ finding, recommendation, sources }) {
-  const [expanded, setExpanded] = useState(finding.priority === 'attention');
+function FindingCard({ finding, recommendation, sources, defaultExpanded = false }) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [showEvidence, setShowEvidence] = useState(false);
 
   const config = PRIORITY_CONFIG[finding.priority] || PRIORITY_CONFIG.normal;
@@ -134,7 +141,7 @@ function FindingCard({ finding, recommendation, sources }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <CheckCircle2 size={16} color="#10B981" />
           <span style={{ fontSize: '14px', fontWeight: 600, color: colors.textPrimary }}>
-            {finding.parameter}
+            {t(finding.parameter, finding.parameter)}
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -154,7 +161,7 @@ function FindingCard({ finding, recommendation, sources }) {
               borderRadius: '6px',
             }}
           >
-            ✓ Normal
+            ✓ {t('status_normal', 'Normal')}
           </span>
         </div>
       </div>
@@ -162,7 +169,9 @@ function FindingCard({ finding, recommendation, sources }) {
   }
 
   const DirectionIcon = finding.status === 'high' ? ArrowUp : ArrowDown;
-  const directionLabel = finding.status === 'high' ? 'Above reference range' : 'Below reference range';
+  const directionLabel = finding.status === 'high'
+    ? t('above_reference_range', 'Above reference range')
+    : t('below_reference_range', 'Below reference range');
 
   return (
     <div
@@ -184,7 +193,7 @@ function FindingCard({ finding, recommendation, sources }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '18px 20px',
+          padding: '16px 20px',
           border: 'none',
           backgroundColor: config.bg,
           cursor: 'pointer',
@@ -195,14 +204,14 @@ function FindingCard({ finding, recommendation, sources }) {
           <Icon size={20} color={config.color} />
           <div style={{ textAlign: 'left' }}>
             <div style={{ fontSize: '15px', fontWeight: 700, color: colors.textPrimary }}>
-              {finding.parameter}
+              {t(finding.parameter, finding.parameter)}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
-              <span style={{ fontSize: '18px', fontWeight: 800, color: config.color }}>
+              <span style={{ fontSize: '17px', fontWeight: 800, color: config.color }}>
                 {finding.value} {finding.unit}
               </span>
               <span style={{ fontSize: '12px', color: '#94A3B8' }}>
-                Reference: {finding.reference_range}
+                {t('reference', 'Reference')}: {finding.reference_range}
               </span>
             </div>
           </div>
@@ -252,7 +261,7 @@ function FindingCard({ finding, recommendation, sources }) {
                 letterSpacing: '0.04em',
               }}
             >
-              Why is this flagged?
+              {t('why_flagged', 'Why is this flagged?')}
             </div>
             <p style={{ fontSize: '13px', color: colors.textPrimary, margin: 0, lineHeight: '1.5' }}>
               {recommendation.why_flagged}
@@ -290,7 +299,7 @@ function FindingCard({ finding, recommendation, sources }) {
           >
             <HeartPulse size={18} color={colors.primary} />
             <span style={{ fontSize: '14px', fontWeight: 700, color: colors.textPrimary }}>
-              AI Guidance
+              {t('ai_guidance', 'AI Guidance')}
             </span>
             <span
               style={{
@@ -302,7 +311,7 @@ function FindingCard({ finding, recommendation, sources }) {
                 borderRadius: '6px',
               }}
             >
-              Based on this finding and retrieved evidence
+              {t('guidance_tag', 'Based on this finding and retrieved evidence')}
             </span>
           </div>
 
@@ -310,7 +319,7 @@ function FindingCard({ finding, recommendation, sources }) {
           {recommendation.general_support?.length > 0 && (
             <GuidanceSection
               icon={<HeartPulse size={16} color="#10B981" />}
-              title="General Support"
+              title={t('general_support', 'General Support')}
               items={recommendation.general_support}
               color="#10B981"
               bg="rgba(16, 185, 129, 0.06)"
@@ -321,7 +330,7 @@ function FindingCard({ finding, recommendation, sources }) {
           {recommendation.discuss_with_clinician?.length > 0 && (
             <GuidanceSection
               icon={<MessageCircle size={16} color={colors.primary} />}
-              title="Discuss With Your Clinician"
+              title={t('discuss_clinician', 'Discuss With Your Clinician')}
               items={recommendation.discuss_with_clinician}
               color={colors.primary}
               bg="rgba(79, 70, 229, 0.06)"
@@ -332,7 +341,7 @@ function FindingCard({ finding, recommendation, sources }) {
           {recommendation.follow_up?.length > 0 && (
             <GuidanceSection
               icon={<CalendarClock size={16} color="#F59E0B" />}
-              title="Follow-up"
+              title={t('follow_up', 'Follow-up')}
               items={recommendation.follow_up}
               color="#F59E0B"
               bg="rgba(245, 158, 11, 0.06)"
@@ -360,7 +369,7 @@ function FindingCard({ finding, recommendation, sources }) {
               }}
             >
               <BookOpen size={14} />
-              <span>Why this recommendation?</span>
+              <span>{t('why_recommendation', 'Why this recommendation?')}</span>
               {showEvidence ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
 
@@ -375,7 +384,7 @@ function FindingCard({ finding, recommendation, sources }) {
                 }}
               >
                 <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '10px' }}>
-                  Recommendation generated from:
+                  {t('recommendation_generated_from', 'Recommendation generated from:')}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <EvidenceItem label={`${finding.parameter} = ${finding.value} ${finding.unit}`} />
@@ -389,7 +398,7 @@ function FindingCard({ finding, recommendation, sources }) {
                 {recommendation.evidence_sources?.length > 0 && sources?.length > 0 && (
                   <div style={{ marginTop: '12px', borderTop: '1px solid #E2E8F0', paddingTop: '10px' }}>
                     <div style={{ fontSize: '11px', fontWeight: 700, color: '#94A3B8', marginBottom: '6px' }}>
-                      EVIDENCE SOURCES
+                      {t('evidence_sources', 'EVIDENCE SOURCES')}
                     </div>
                     {sources
                       .filter((s) => recommendation.evidence_sources.includes(s.id))
@@ -482,9 +491,13 @@ export default function InsightsView({
   recommendations = [],
   sources = [],
 }) {
+  const { t } = useTranslation();
   const abnormalFindings = findings.filter((f) => f.priority !== 'normal');
   const normalFindings = findings.filter((f) => f.priority === 'normal');
   const [showNormal, setShowNormal] = useState(false);
+  const [showAllNormal, setShowAllNormal] = useState(false);
+
+  const visibleNormalFindings = showAllNormal ? normalFindings : normalFindings.slice(0, 5);
 
   const getRecForFinding = (param) =>
     recommendations.find(
@@ -504,7 +517,7 @@ export default function InsightsView({
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         <HeartPulse size={22} color={colors.primary} />
         <h2 style={{ fontSize: '20px', fontWeight: 800, color: colors.textPrimary, margin: 0 }}>
-          AI Report Insights
+          {t('ai_report_insights', 'AI Report Insights')}
         </h2>
       </div>
 
@@ -524,7 +537,7 @@ export default function InsightsView({
               margin: '8px 0 12px',
             }}
           >
-            Priority Findings ({abnormalFindings.length})
+            {t('priority_findings', 'Priority Findings')} ({abnormalFindings.length})
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {abnormalFindings.map((finding, idx) => (
@@ -533,6 +546,7 @@ export default function InsightsView({
                 finding={finding}
                 recommendation={getRecForFinding(finding.parameter)}
                 sources={sources}
+                defaultExpanded={idx === 0}
               />
             ))}
           </div>
@@ -558,7 +572,7 @@ export default function InsightsView({
           >
             <CheckCircle2 size={16} color="#10B981" />
             <span style={{ fontSize: '14px', fontWeight: 700, color: '#10B981' }}>
-              Normal Findings ({normalFindings.length})
+              {t('normal_findings', 'Normal Findings')} ({normalFindings.length})
             </span>
             {showNormal ? (
               <ChevronUp size={16} color="#10B981" />
@@ -568,9 +582,34 @@ export default function InsightsView({
           </button>
           {showNormal && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {normalFindings.map((finding, idx) => (
+              {visibleNormalFindings.map((finding, idx) => (
                 <FindingCard key={idx} finding={finding} recommendation={null} sources={[]} />
               ))}
+              {normalFindings.length > 5 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllNormal(!showAllNormal)}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid #E2E8F0',
+                    backgroundColor: '#FFFFFF',
+                    color: colors.primary,
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    marginTop: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '4px',
+                  }}
+                >
+                  {showAllNormal
+                    ? t('show_less', 'Show Less')
+                    : t('show_more_count', 'Show More (+{count} more)', { count: normalFindings.length - 5 })}
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -593,8 +632,7 @@ export default function InsightsView({
       >
         <ShieldCheck size={16} color="#7C3AED" />
         <span>
-          AI-generated insights are for informational purposes only. All findings and recommendations
-          should be reviewed by a qualified healthcare professional.
+          {t('insights_disclaimer', 'AI-generated insights are for informational purposes only. All findings and recommendations should be reviewed by a qualified healthcare professional.')}
         </span>
       </div>
     </div>

@@ -45,6 +45,17 @@ export const downloadReportPdf = async (reportId) => {
   return response;
 };
 
+export const downloadProtectedPdf = async (reportId) => {
+  const response = await apiClient.get(`/api/reports/${reportId}/download-protected`, {
+    responseType: 'blob',
+  });
+  const hint =
+    response.headers?.['x-password-hint'] ||
+    response.headers?.['X-Password-Hint'] ||
+    'First 4 letters of patient name in UPPERCASE + birth year (e.g. SUBO2005)';
+  return { blob: response.data, hint };
+};
+
 export const reportsApi = {
   uploadReport,
   getReportStatus,
@@ -53,6 +64,7 @@ export const reportsApi = {
   reprocessReport,
   getReferenceRanges,
   downloadReportPdf,
+  downloadProtectedPdf,
 };
 
 export default reportsApi;

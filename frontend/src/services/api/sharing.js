@@ -8,9 +8,9 @@ const publicClient = axios.create({
 
 // --- OWNER-AUTHENTICATED API CALLS ---
 
-export const createShareLink = async (reportId, expiresInDays = 7) => {
+export const createShareLink = async (reportId, durationDays = 7) => {
   const response = await apiClient.post(`/api/reports/${reportId}/share`, {
-    expires_in_days: expiresInDays,
+    duration_days: durationDays,
   });
   return response.data;
 };

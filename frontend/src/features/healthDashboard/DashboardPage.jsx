@@ -27,7 +27,7 @@ import { formatTestDisplayName } from '../../utils/formatters';
 import StatusBadge from '../../components/StatusBadge';
 import { getDashboard, getProfileReports } from '../../api/dashboardApi';
 import { getRecommendations, generateRecommendations } from '../../api/recommendationsApi';
-import { downloadReportPdf } from '../../api/reportsApi';
+import { downloadReportPdf, downloadProtectedPdf } from '../../api/reportsApi';
 import { extractFilenameFromDisposition, downloadBlob, getDownloadErrorMessage } from '../../utils/helpers';
 import { useProfileStore } from '../../store/profileStore';
 import { useTranslation } from '../../i18n/translations';
@@ -56,11 +56,18 @@ export default function DashboardPage() {
   // Share modal state
   const [shareModalOpen, setShareModalOpen] = useState(false);
 
-  // Download report state
+  // Download report state (regular)
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState('');
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [downloadPassword, setDownloadPassword] = useState('');
+
+  // Download report state (password-protected)
+  const [protectedDownloading, setProtectedDownloading] = useState(false);
+  const [protectedDownloadError, setProtectedDownloadError] = useState('');
+  const [protectedDownloadSuccess, setProtectedDownloadSuccess] = useState(false);
+  const [passwordHint, setPasswordHint] = useState('');
+  const [showPasswordHintModal, setShowPasswordHintModal] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -171,6 +178,30 @@ export default function DashboardPage() {
   const handleSelectReport = (targetId) => {
     setDateDropdownOpen(false);
     navigate(`/reports/${targetId}/dashboard`);
+  };
+
+  const handleProtectedDownload = async () => {
+    if (protectedDownloading) return;
+    if (!reportId) {
+      setProtectedDownloadError('No report ID specified.');
+      return;
+    }
+    setProtectedDownloading(true);
+    setProtectedDownloadError('');
+    setProtectedDownloadSuccess(false);
+    try {
+      const { blob, hint } = await downloadProtectedPdf(reportId);
+      downloadBlob(blob, `report_${reportId}_protected.pdf`);
+      setPasswordHint(hint);
+      setProtectedDownloadSuccess(true);
+      setShowPasswordHintModal(true);
+      setTimeout(() => setProtectedDownloadSuccess(false), 6000);
+    } catch (err) {
+      const message = await getDownloadErrorMessage(err);
+      setProtectedDownloadError(message);
+    } finally {
+      setProtectedDownloading(false);
+    }
   };
 
   if (loading) {
@@ -438,6 +469,49 @@ export default function DashboardPage() {
                 </>
               )}
             </button>
+
+            {/* Download Encrypted (Password-Protected) PDF Button */}
+            <button
+              type="button"
+              onClick={handleProtectedDownload}
+              disabled={protectedDownloading}
+              title="Download password-protected PDF (Aadhaar-style)"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 20px',
+                fontSize: '14px',
+                fontWeight: 600,
+                color: protectedDownloading ? '#64748B' : '#059669',
+                background: protectedDownloading
+                  ? 'rgba(100,116,139,0.08)'
+                  : 'rgba(5, 150, 105, 0.08)',
+                border: `1px solid ${protectedDownloading ? 'rgba(100,116,139,0.2)' : 'rgba(5,150,105,0.25)'}`,
+                borderRadius: '12px',
+                cursor: protectedDownloading ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s ease',
+                fontFamily: 'Poppins, sans-serif',
+                opacity: protectedDownloading ? 0.75 : 1,
+              }}
+            >
+              {protectedDownloading ? (
+                <>
+                  <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} />
+                  <span>Encrypting...</span>
+                </>
+              ) : protectedDownloadSuccess ? (
+                <>
+                  <CheckCircle2 size={18} />
+                  <span>Downloaded!</span>
+                </>
+              ) : (
+                <>
+                  <span style={{ fontSize: '16px' }}>🔒</span>
+                  <span>Download Encrypted PDF</span>
+                </>
+              )}
+            </button>
           </div>
         </div>
 
@@ -473,6 +547,36 @@ export default function DashboardPage() {
                 fontSize: '18px',
                 padding: '0 4px',
               }}
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+        {/* Protected Download Error Banner */}
+        {protectedDownloadError && (
+          <div
+            style={{
+              marginBottom: '20px',
+              padding: '12px 16px',
+              backgroundColor: 'rgba(239, 68, 68, 0.08)',
+              border: '1px solid rgba(239, 68, 68, 0.2)',
+              borderRadius: '12px',
+              color: colors.danger,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontSize: '14px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AlertTriangle size={18} />
+              <span>{protectedDownloadError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setProtectedDownloadError('')}
+              style={{ background: 'none', border: 'none', color: colors.danger, cursor: 'pointer', fontWeight: 600, fontSize: '18px', padding: '0 4px' }}
             >
               ×
             </button>
@@ -867,6 +971,106 @@ export default function DashboardPage() {
         open={shareModalOpen}
         onOpenChange={setShareModalOpen}
       />
+
+      {/* Password Hint Modal for Encrypted PDF */}
+      {showPasswordHintModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.55)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '24px',
+          }}
+          onClick={() => setShowPasswordHintModal(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              padding: '36px 32px',
+              maxWidth: '460px',
+              width: '100%',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
+              fontFamily: 'Poppins, sans-serif',
+              textAlign: 'center',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Lock Icon */}
+            <div
+              style={{
+                width: '64px',
+                height: '64px',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #059669 0%, #10B981 100%)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '28px',
+                marginBottom: '20px',
+                boxShadow: '0 8px 24px rgba(5,150,105,0.3)',
+              }}
+            >
+              🔒
+            </div>
+
+            <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#1E293B', margin: '0 0 8px' }}>
+              PDF Downloaded Successfully!
+            </h2>
+            <p style={{ fontSize: '13px', color: '#64748B', margin: '0 0 24px' }}>
+              Your report is encrypted with a personal password.
+            </p>
+
+            {/* Password Hint Box */}
+            <div
+              style={{
+                backgroundColor: 'rgba(5,150,105,0.06)',
+                border: '1px solid rgba(5,150,105,0.2)',
+                borderRadius: '12px',
+                padding: '16px 20px',
+                marginBottom: '24px',
+                textAlign: 'left',
+              }}
+            >
+              <div style={{ fontSize: '11px', fontWeight: 700, color: '#059669', textTransform: 'uppercase', marginBottom: '6px', letterSpacing: '0.05em' }}>
+                🔑 Password Hint
+              </div>
+              <div style={{ fontSize: '14px', fontWeight: 600, color: '#1E293B', lineHeight: 1.6 }}>
+                {passwordHint}
+              </div>
+            </div>
+
+            <div style={{ fontSize: '12px', color: '#94A3B8', marginBottom: '24px', lineHeight: 1.6 }}>
+              Open the downloaded PDF in any viewer and enter this password when prompted.
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowPasswordHintModal(false)}
+              style={{
+                width: '100%',
+                padding: '12px 24px',
+                fontSize: '14px',
+                fontWeight: 700,
+                color: '#FFFFFF',
+                background: 'linear-gradient(135deg, #059669 0%, #10B981 100%)',
+                border: 'none',
+                borderRadius: '12px',
+                cursor: 'pointer',
+                fontFamily: 'Poppins, sans-serif',
+                boxShadow: '0 4px 12px rgba(5,150,105,0.3)',
+              }}
+            >
+              Got it, thanks!
+            </button>
+          </div>
+        </div>
+      )}
     </PageLayout>
   );
 }

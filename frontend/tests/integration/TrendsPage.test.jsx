@@ -156,4 +156,75 @@ describe('TrendsPage Integration Tests', () => {
     expect(await screen.findByText('Creatinine')).toBeInTheDocument();
     expect(screen.queryByText(/loading health trends/i)).not.toBeInTheDocument();
   });
+
+  it('limits initial list to 4 items and toggles with "Show More" / "Show Less"', async () => {
+    const manyTests = [
+      { test_name: 'Basophils', latest_value: 0, latest_unit: '%', latest_status: 'green' },
+      { test_name: 'Lymphocytes', latest_value: 15, latest_unit: '%', latest_status: 'green' },
+      { test_name: 'Monocytes', latest_value: 7, latest_unit: '%', latest_status: 'green' },
+      { test_name: 'Packed Cell Volume (Hematocrit)', latest_value: 43.9, latest_unit: '%', latest_status: 'green' },
+      { test_name: 'Platelet Count', latest_value: 2.68, latest_unit: 'lakh', latest_status: 'green' },
+      { test_name: 'RDW-CV', latest_value: 15.6, latest_unit: '%', latest_status: 'green' },
+    ];
+
+    trendsApi.getTrendOverview.mockResolvedValueOnce({
+      profile_id: 1,
+      health_score_trend: { sparkline: [80], direction: 'stable', latest_score: 80, based_on_report_count: 1 },
+      tests: manyTests,
+    });
+
+    renderComponent();
+
+    expect(await screen.findByText('Basophils')).toBeInTheDocument();
+    expect(screen.getByText('Lymphocytes')).toBeInTheDocument();
+    expect(screen.getByText('Monocytes')).toBeInTheDocument();
+    expect(screen.getByText('Packed Cell Volume (Hematocrit)')).toBeInTheDocument();
+    // 5th and 6th items should not be visible initially
+    expect(screen.queryByText('Platelet Count')).not.toBeInTheDocument();
+    expect(screen.queryByText('RDW-CV')).not.toBeInTheDocument();
+
+    // "Show More (+2 more)" button should be present
+    const showMoreBtn = screen.getByText(/Show More \(\+2 more\)/i);
+    expect(showMoreBtn).toBeInTheDocument();
+
+    // Clicking Show More expands the list
+    fireEvent.click(showMoreBtn);
+    expect(screen.getByText('Platelet Count')).toBeInTheDocument();
+    expect(screen.getByText('RDW-CV')).toBeInTheDocument();
+    expect(screen.getByText(/Show Less/i)).toBeInTheDocument();
+
+    // Clicking Show Less collapses it again
+    fireEvent.click(screen.getByText(/Show Less/i));
+    expect(screen.queryByText('Platelet Count')).not.toBeInTheDocument();
+  });
+
+  it('renders translated UI strings and test names when language is Hindi (hi-IN)', async () => {
+    const { useUIStore } = await import('../../src/store/uiStore');
+    useUIStore.setState({ activeLanguage: 'hi-IN' });
+
+    trendsApi.getTrendOverview.mockResolvedValueOnce({
+      profile_id: 1,
+      health_score_trend: { sparkline: [85], direction: 'stable', latest_score: 85, based_on_report_count: 1 },
+      tests: [
+        { test_name: 'Neutrophils', latest_value: 75, latest_unit: '%', latest_status: 'yellow' },
+        { test_name: 'Basophils', latest_value: 0, latest_unit: '%', latest_status: 'green' },
+      ],
+    });
+
+    renderComponent();
+
+    // Wait for TrendsPage data to load by querying a section header inside TrendsPage
+    expect(await screen.findByText('प्रमुख निष्कर्ष')).toBeInTheDocument();
+    expect(screen.getByText('स्वास्थ्य अवलोकन')).toBeInTheDocument();
+    expect(screen.getByText('अच्छा प्रदर्शन')).toBeInTheDocument();
+    expect(screen.getByText('सुधार की आवश्यकता')).toBeInTheDocument();
+    expect(screen.getAllByText('समीक्षा').length).toBeGreaterThanOrEqual(1);
+
+    // Check translated test names
+    expect(screen.getByText('न्यूट्रोफिल्स')).toBeInTheDocument();
+    expect(screen.getByText('बेसोफिल्स')).toBeInTheDocument();
+
+    // Reset back to English
+    useUIStore.setState({ activeLanguage: 'en-IN' });
+  });
 });

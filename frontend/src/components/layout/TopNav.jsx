@@ -37,7 +37,8 @@ export default function TopNav() {
   };
 
   const isDietPlanActive = location.pathname.includes('/diet-plan');
-  const isUploadActive = (location.pathname === '/upload' || location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/reports')) && !isDietPlanActive;
+  const isUploadActive = (location.pathname === '/upload' || location.pathname.startsWith('/dashboard')) && !isDietPlanActive;
+  const isReportActive = location.pathname.startsWith('/reports');
   const isTrendsActive = location.pathname.includes('/trends');
   const isSharingActive = location.pathname.includes('/sharing');
   const isProfilesActive = location.pathname.includes('/profiles') && !location.pathname.includes('/trends') && !location.pathname.includes('/sharing') && !location.pathname.includes('/diet-plan');
