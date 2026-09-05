@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { useAuthStore } from '../../store/authStore';
 
-export const API_URL = import.meta.env.VITE_API_BASE_URL || 'https://kdk-grove-1.onrender.com';
+export const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://192.168.83.246:8000';
 
 const apiClient = axios.create({
   baseURL: API_URL,
