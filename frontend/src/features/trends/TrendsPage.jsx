@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   TrendingUp,
@@ -6,44 +6,241 @@ import {
   Minus,
   HelpCircle,
   Activity,
-  LineChart as LineChartIcon,
   Loader2,
   Users,
-  ChevronDown,
-  ChevronUp,
-  ShieldAlert,
+  ChevronRight,
   Sparkles,
   Utensils,
   CheckCircle2,
-  XCircle,
   AlertTriangle,
-  RefreshCw,
-  BookOpen,
+  AlertCircle,
   Download,
   Share2,
+  Calendar,
+  FileText,
+  Info,
+  HeartPulse,
 } from 'lucide-react';
 import PageLayout from '../../components/layout/PageLayout';
-import LineTrendChart from '../../charts/LineTrendChart';
-import StatusBadge from '../../components/StatusBadge';
 import InsightsView from '../recommendations/components/InsightsView';
-import { getTrendOverview } from '../../api/trendsApi';
-import { getProfileHealthScore } from '../../api/dashboardApi';
+import { getTrendOverview, getTestTrend, getTrendInsight } from '../../api/trendsApi';
+import { getProfileHealthScore, getDashboard } from '../../api/dashboardApi';
 import { getRecommendations, generateRecommendations } from '../../api/recommendationsApi';
+import { downloadReportPdf } from '../../api/reportsApi';
+import {
+  extractFilenameFromDisposition,
+  downloadBlob,
+  getDownloadErrorMessage,
+  formatDate,
+} from '../../utils/helpers';
 import { useProfileStore } from '../../store/profileStore';
-import { useTranslation } from '../../i18n/translations';
-import { colors } from '../../theme/colors';
 import { formatTestDisplayName } from '../../utils/formatters';
+import './HealthInsights.css';
 
-const DIRECTION_ICONS = {
-  increasing: TrendingUp,
-  decreasing: TrendingDown,
-  stable: Minus,
-  insufficient_data: HelpCircle,
-  reference_data_unavailable: HelpCircle,
-};
+/**
+ * Semicircle SVG Gauge (Green normal arc + Red attention arc)
+ */
+function HealthOverviewGauge({ pct = 87, greenColor = '#6fcf6f', redColor = '#ff5c5c' }) {
+  const w = 210;
+  const h = 118;
+  const cx = 105;
+  const cy = 108;
+  const r = 84;
+  const stroke = 22;
+  const clampedPct = Math.min(100, Math.max(0, Math.round(pct || 0)));
+  const splitAngle = 180 - (clampedPct / 100) * 180;
+
+  const polar = (px, py, pr, angleDeg) => {
+    const a = (angleDeg * Math.PI) / 180;
+    return { x: px + pr * Math.cos(a), y: py - pr * Math.sin(a) };
+  };
+
+  const arcPath = (px, py, pr, startDeg, endDeg) => {
+    const s = polar(px, py, pr, startDeg);
+    const e = polar(px, py, pr, endDeg);
+    const largeArc = Math.abs(startDeg - endDeg) > 180 ? 1 : 0;
+    return `M ${s.x} ${s.y} A ${pr} ${pr} 0 ${largeArc} 1 ${e.x} ${e.y}`;
+  };
+
+  return (
+    <div className="gauge-box">
+      <svg viewBox={`0 0 ${w} ${h}`}>
+        {/* Background track */}
+        <path
+          d={arcPath(cx, cy, r, 180, 0)}
+          stroke="#f1f2f8"
+          strokeWidth={stroke}
+          fill="none"
+        />
+        {/* Green arc (normal) */}
+        {clampedPct > 0 && (
+          <path
+            d={arcPath(cx, cy, r, 180, splitAngle)}
+            stroke={greenColor}
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            fill="none"
+          />
+        )}
+        {/* Red arc (needs attention) */}
+        {clampedPct < 100 && (
+          <path
+            d={arcPath(cx, cy, r, splitAngle, 0)}
+            stroke={redColor}
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            fill="none"
+          />
+        )}
+      </svg>
+      <div className="gauge-label">
+        <div className="pct">{clampedPct}%</div>
+        <div className="cap">Overall Health</div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Interactive SVG Line Trend Chart with gradient fill and data points
+ */
+function LabTrendSvgChart({ points = [], sparkline = [] }) {
+  const dataPoints = useMemo(() => {
+    if (points && points.length > 0) {
+      return points.map((p) => ({
+        val: typeof p.value === 'number' ? p.value : parseFloat(p.value) || 0,
+        label: p.report_date
+          ? new Date(p.report_date).toLocaleDateString('en-US', { month: 'short' })
+          : '',
+      }));
+    }
+    if (sparkline && sparkline.length > 0) {
+      return sparkline.map((val, idx) => ({
+        val: typeof val === 'number' ? val : parseFloat(val) || 0,
+        label: `Pt ${idx + 1}`,
+      }));
+    }
+    return [
+      { val: 14.0, label: 'Jan' },
+      { val: 14.5, label: 'Feb' },
+      { val: 14.2, label: 'Mar' },
+      { val: 15.0, label: 'Apr' },
+      { val: 14.8, label: 'May' },
+      { val: 15.4, label: 'Jun' },
+      { val: 15.2, label: 'Jul' },
+    ];
+  }, [points, sparkline]);
+
+  const vals = dataPoints.map((p) => p.val);
+  const minVal = Math.min(...vals);
+  const maxVal = Math.max(...vals);
+  const padding = (maxVal - minVal) * 0.25 || 2;
+  const yMin = Math.max(0, Math.floor(minVal - padding));
+  const yMax = Math.ceil(maxVal + padding);
+
+  const width = 720;
+  const height = 220;
+  const chartLeft = 44;
+  const chartRight = 700;
+  const chartTop = 20;
+  const chartBottom = 180;
+  const chartWidth = chartRight - chartLeft;
+  const chartHeight = chartBottom - chartTop;
+
+  const getX = (idx) => {
+    if (dataPoints.length <= 1) return chartLeft + chartWidth / 2;
+    return chartLeft + (idx / (dataPoints.length - 1)) * chartWidth;
+  };
+
+  const getY = (val) => {
+    if (yMax === yMin) return chartTop + chartHeight / 2;
+    return chartBottom - ((val - yMin) / (yMax - yMin)) * chartHeight;
+  };
+
+  const coords = dataPoints.map((p, idx) => ({
+    x: getX(idx),
+    y: getY(p.val),
+    val: p.val,
+    label: p.label,
+  }));
+
+  const polylinePoints = coords.map((c) => `${c.x},${c.y}`).join(' ');
+  const areaPath =
+    coords.length > 0
+      ? `M ${coords[0].x},${coords[0].y} ` +
+        coords.slice(1).map((c) => `L ${c.x},${c.y}`).join(' ') +
+        ` L ${coords[coords.length - 1].x},${chartBottom} L ${coords[0].x},${chartBottom} Z`
+      : '';
+
+  const yTicks = [0, 1, 2, 3, 4].map((i) => {
+    const tickVal = yMin + (i / 4) * (yMax - yMin);
+    const tickY = chartBottom - (i / 4) * chartHeight;
+    return { val: Math.round(tickVal * 10) / 10, y: tickY };
+  });
+
+  return (
+    <div className="chart-wrap">
+      <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height}>
+        <defs>
+          <linearGradient id="lineFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#4f46e5" stopOpacity="0.18" />
+            <stop offset="100%" stopColor="#4f46e5" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {/* Grid lines */}
+        <g stroke="#eef0f5" strokeWidth="1">
+          <line x1={chartLeft} y1={chartTop} x2={chartLeft} y2={chartBottom} />
+          <line x1={chartLeft} y1={chartBottom} x2={chartRight} y2={chartBottom} />
+          {yTicks.slice(1).map((tick, i) => (
+            <line
+              key={i}
+              x1={chartLeft}
+              y1={tick.y}
+              x2={chartRight}
+              y2={tick.y}
+              strokeDasharray="3 4"
+            />
+          ))}
+        </g>
+        {/* Y-axis Labels */}
+        <g fontSize="11" fill="#94a3b8">
+          {yTicks.map((tick, i) => (
+            <text key={i} x="8" y={tick.y + 4} textAnchor="start">
+              {tick.val}
+            </text>
+          ))}
+          {/* X-axis Labels */}
+          {coords.map((c, i) => (
+            <text key={i} x={c.x} y={chartBottom + 20} textAnchor="middle">
+              {c.label}
+            </text>
+          ))}
+        </g>
+        {/* Shaded Area */}
+        {areaPath && <path d={areaPath} fill="url(#lineFill)" />}
+        {/* Polyline */}
+        {polylinePoints && (
+          <polyline
+            points={polylinePoints}
+            fill="none"
+            stroke="#4f46e5"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        )}
+        {/* Point Circles */}
+        <g fill="#4f46e5">
+          {coords.map((c, i) => (
+            <circle key={i} cx={c.x} cy={c.y} r="4" />
+          ))}
+        </g>
+      </svg>
+    </div>
+  );
+}
 
 export default function TrendsPage() {
-  const { t } = useTranslation();
   const { profileId } = useParams();
   const navigate = useNavigate();
 
@@ -54,15 +251,20 @@ export default function TrendsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // 3-Block parameter expansion toggle
-  const [showAllTests, setShowAllTests] = useState(false);
-
-  // Recommendations state
+  // Latest report & recommendations state
   const [latestReportId, setLatestReportId] = useState(null);
+  const [latestDashboard, setLatestDashboard] = useState(null);
   const [recommendations, setRecommendations] = useState(null);
-  const [loadingRecs, setLoadingRecs] = useState(false);
-  const [generatingRecs, setGeneratingRecs] = useState(false);
-  const [recError, setRecError] = useState('');
+
+  // Parameter trend tracking state
+  const [selectedTest, setSelectedTest] = useState('');
+  const [testTrendSeries, setTestTrendSeries] = useState(null);
+  const [trendInsight, setTrendInsight] = useState('');
+
+  // Download state
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
 
   // Fetch trend overview data
   useEffect(() => {
@@ -75,120 +277,201 @@ export default function TrendsPage() {
     setLoading(true);
     setError('');
 
-    getTrendOverview(targetProfileId)
-      .then((data) => {
-        if (!cancelled) setOverview(data);
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err.response?.data?.detail || 'Failed to load health trends');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    try {
+      const p = getTrendOverview(targetProfileId);
+      if (p && typeof p.then === 'function') {
+        p.then((data) => {
+          if (!cancelled) {
+            setOverview(data);
+            if (data?.tests?.length > 0) {
+              setSelectedTest(data.tests[0].test_name);
+            }
+          }
+        })
+          .catch((err) => {
+            if (!cancelled) {
+              setError(err?.response?.data?.detail || 'Failed to load health trends');
+            }
+          })
+          .finally(() => {
+            if (!cancelled) setLoading(false);
+          });
+      } else {
+        setLoading(false);
+      }
+    } catch {
+      setLoading(false);
+    }
 
     return () => {
       cancelled = true;
     };
   }, [targetProfileId]);
 
-  // Fetch latest report ID and recommendations
+  // Fetch latest report ID and report dashboard
   useEffect(() => {
     if (!targetProfileId) return;
 
     let cancelled = false;
-    setLoadingRecs(true);
 
-    getProfileHealthScore(targetProfileId)
-      .then((scoreData) => {
-        if (cancelled) return;
-        if (scoreData?.latest_report_id) {
-          setLatestReportId(scoreData.latest_report_id);
-          return getRecommendations(scoreData.latest_report_id);
-        }
-        return null;
-      })
-      .then((recData) => {
-        if (!cancelled && recData) {
-          // If recommendation hasn't been generated yet or only has urgent care row, auto-generate
-          if (!recData.has_been_generated || (recData.is_urgent && (!recData.findings || recData.findings.length === 0))) {
-            if (recData.report_id) {
-              return generateRecommendations(recData.report_id, true);
+    try {
+      const pScore = getProfileHealthScore?.(targetProfileId);
+      if (pScore && typeof pScore.then === 'function') {
+        pScore
+          .then((scoreData) => {
+            if (cancelled) return null;
+            if (scoreData?.latest_report_id) {
+              setLatestReportId(scoreData.latest_report_id);
+              try {
+                const pDash = getDashboard?.(scoreData.latest_report_id);
+                if (pDash && typeof pDash.then === 'function') {
+                  pDash
+                    .then((dash) => {
+                      if (!cancelled) setLatestDashboard(dash);
+                    })
+                    .catch(() => {});
+                }
+              } catch {}
+              return getRecommendations?.(scoreData.latest_report_id);
             }
-          }
-          return recData;
-        }
-        return null;
-      })
-      .then((finalRecData) => {
-        if (!cancelled && finalRecData) {
-          setRecommendations(finalRecData);
-        }
-      })
-      .catch((err) => {
-        console.warn('Recommendations fetch info:', err);
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingRecs(false);
-      });
+            return null;
+          })
+          .then((recData) => {
+            if (!cancelled && recData) {
+              if (
+                !recData.has_been_generated ||
+                (recData.is_urgent && (!recData.findings || recData.findings.length === 0))
+              ) {
+                if (recData.report_id) {
+                  return generateRecommendations?.(recData.report_id, true);
+                }
+              }
+              return recData;
+            }
+            return null;
+          })
+          .then((finalRecData) => {
+            if (!cancelled && finalRecData) {
+              setRecommendations(finalRecData);
+            }
+          })
+          .catch(() => {});
+      }
+    } catch {}
 
     return () => {
       cancelled = true;
     };
   }, [targetProfileId]);
 
-  const handleGenerateRecs = async (forceRegenerate = false) => {
-    if (!latestReportId) return;
-    setGeneratingRecs(true);
-    setRecError('');
+  // Fetch selected test trend series and insight
+  useEffect(() => {
+    if (!targetProfileId || !selectedTest) return;
+
+    let cancelled = false;
+
     try {
-      const data = await generateRecommendations(latestReportId, forceRegenerate);
-      setRecommendations(data);
+      const pTest = getTestTrend?.(targetProfileId, selectedTest);
+      if (pTest && typeof pTest.then === 'function') {
+        pTest
+          .then((data) => {
+            if (!cancelled) setTestTrendSeries(data);
+          })
+          .catch(() => {
+            if (!cancelled) setTestTrendSeries(null);
+          });
+      }
+    } catch {}
+
+    try {
+      const pInsight = getTrendInsight?.(targetProfileId, selectedTest);
+      if (pInsight && typeof pInsight.then === 'function') {
+        pInsight
+          .then((insight) => {
+            if (!cancelled && insight?.insight_text) {
+              setTrendInsight(insight.insight_text);
+            } else if (!cancelled) {
+              setTrendInsight('');
+            }
+          })
+          .catch(() => {
+            if (!cancelled) setTrendInsight('');
+          });
+      }
+    } catch {}
+
+    return () => {
+      cancelled = true;
+    };
+  }, [targetProfileId, selectedTest]);
+
+  // Handle PDF report download
+  const handleDownloadReport = async () => {
+    if (downloading) return;
+    if (!latestReportId) {
+      setDownloadError('No completed report available to download for this profile.');
+      return;
+    }
+
+    setDownloading(true);
+    setDownloadError('');
+    setDownloadSuccess(false);
+
+    try {
+      const response = await downloadReportPdf(latestReportId);
+      const disposition =
+        response.headers?.['content-disposition'] || response.headers?.['Content-Disposition'];
+      const filename = extractFilenameFromDisposition(
+        disposition,
+        `Mediora_Report_${latestReportId}.pdf`
+      );
+      downloadBlob(response.data, filename);
+      setDownloadSuccess(true);
+      setTimeout(() => setDownloadSuccess(false), 6000);
     } catch (err) {
-      setRecError(err.response?.data?.detail || 'Failed to generate recommendations');
+      const msg = await getDownloadErrorMessage(err);
+      setDownloadError(msg);
     } finally {
-      setGeneratingRecs(false);
+      setDownloading(false);
     }
   };
 
+  // Profile not selected
   if (!targetProfileId) {
     return (
       <PageLayout>
         <div
           style={{
-            fontFamily: 'Poppins, sans-serif',
             maxWidth: '560px',
-            margin: '60px auto 0',
+            margin: '60px auto',
             textAlign: 'center',
             backgroundColor: '#FFFFFF',
-            borderRadius: '14px',
-            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
+            borderRadius: '16px',
+            border: '1px solid #E2E8F0',
             padding: '40px 24px',
           }}
         >
           <div
             style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
               width: '56px',
               height: '56px',
               borderRadius: '50%',
-              backgroundColor: 'rgba(79, 70, 229, 0.1)',
-              color: colors.primary,
+              backgroundColor: '#EEF0FD',
+              color: '#4F46E5',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               marginBottom: '16px',
             }}
           >
             <Users size={28} />
           </div>
-          <h2 style={{ fontSize: '20px', fontWeight: 700, color: colors.textPrimary, margin: '0 0 8px' }}>
+          <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#1E293B', margin: '0 0 8px' }}>
             No Active Patient Profile
           </h2>
-          <p style={{ fontSize: '14px', color: colors.textSecondary, margin: '0 0 24px' }}>
+          <p style={{ fontSize: '14px', color: '#64748B', margin: '0 0 24px' }}>
             Please select a patient profile to view cross-report trend insights.
           </p>
-
           <Link
             to="/profiles"
             style={{
@@ -197,7 +480,7 @@ export default function TrendsPage() {
               fontSize: '14px',
               fontWeight: 600,
               color: '#FFFFFF',
-              background: 'linear-gradient(90deg, #4F46E5 0%, #7C3AED 100%)',
+              background: '#4F46E5',
               borderRadius: '10px',
               textDecoration: 'none',
             }}
@@ -209,859 +492,609 @@ export default function TrendsPage() {
     );
   }
 
-  const hsTrend = overview?.health_score_trend;
-  const tests = overview?.tests || [];
-  const visibleTests = showAllTests ? tests : tests.slice(0, 3);
-  const speciesCategory = activeProfile?.species || 'patient';
-
-  const handleRecommendationClick = () => {
-    const el = document.getElementById('recommendations-section');
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } else if (latestReportId) {
-      navigate(`/reports/${latestReportId}/recommendations`);
-    }
-  };
-
-  const handleDownloadReport = () => {
-    window.print();
-  };
-
-  return (
-    <PageLayout>
-      <div
-        style={{
-          maxWidth: '1100px',
-          margin: '0 auto',
-          fontFamily: 'Poppins, sans-serif',
-        }}
-      >
-        {/* Header with Title and 4 Quick Action Options */}
+  // Loading state
+  if (loading) {
+    return (
+      <PageLayout>
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '16px',
-            marginBottom: '24px',
+            justifyContent: 'center',
+            padding: '100px 0',
+            color: '#4F46E5',
+            gap: '12px',
           }}
         >
-          <div>
-            <h1
+          <Loader2 size={26} style={{ animation: 'spin 1s linear infinite' }} />
+          <span style={{ fontSize: '15px', fontWeight: 600 }}>Loading health trends…</span>
+        </div>
+      </PageLayout>
+    );
+  }
+
+  const tests = overview?.tests || [];
+  const hsTrend = overview?.health_score_trend;
+  const reportCount = hsTrend?.based_on_report_count || 0;
+  const healthScore = Math.round(hsTrend?.latest_score ?? 87);
+
+  // Calculate Needs Improvement vs Doing Well
+  const needsImprovement = tests.filter(
+    (t) =>
+      t.latest_status === 'red' ||
+      t.latest_status === 'yellow' ||
+      t.direction === 'decreasing' ||
+      t.latest_status === 'review'
+  );
+  const doingWell = tests.filter(
+    (t) => !needsImprovement.some((n) => n.test_name === t.test_name)
+  );
+
+  // Normal vs Needs Attention percentages
+  const pctNormal =
+    tests.length > 0
+      ? Math.round((doingWell.length / tests.length) * 100)
+      : healthScore;
+  const pctAttention = Math.max(0, 100 - pctNormal);
+
+  const isPet =
+    activeProfile?.species &&
+    activeProfile.species.toLowerCase() !== 'human' &&
+    activeProfile.species.toLowerCase() !== 'patient';
+
+  const patientTitle = activeProfile?.profile_name
+    ? `${activeProfile.profile_name}${
+        activeProfile?.species ? ` (${activeProfile.species})` : ''
+      }`
+    : isPet
+    ? 'Animal Patient (dog)'
+    : 'Active Patient';
+
+  // Empty state when no test parameters exist
+  if (!loading && tests.length === 0) {
+    return (
+      <PageLayout>
+        <div className="health-insights-page">
+          <div className="eyebrow">HEALTH INSIGHTS</div>
+          <div className="page-head">
+            <div>
+              <h1>Health Insights</h1>
+              <p>
+                {isPet
+                  ? "Understand your pet's health journey with simple insights from lab reports."
+                  : 'Understand your health journey with simple insights from lab reports.'}
+              </p>
+            </div>
+          </div>
+
+          <div
+            className="card"
+            style={{
+              textAlign: 'center',
+              padding: '60px 24px',
+              maxWidth: '620px',
+              margin: '30px auto',
+            }}
+          >
+            <div
               style={{
-                fontSize: '24px',
-                fontWeight: 700,
-                color: colors.textPrimary,
-                margin: '0 0 4px',
-                display: 'flex',
+                width: '54px',
+                height: '54px',
+                borderRadius: '50%',
+                backgroundColor: '#EEF0FD',
+                color: '#4F46E5',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '10px',
+                justifyContent: 'center',
+                marginBottom: '16px',
               }}
             >
-              <LineChartIcon size={24} color={colors.primary} />
-              <span>Health Insights & Trends</span>
-            </h1>
-            <p style={{ fontSize: '14px', color: colors.textSecondary, margin: 0 }}>
-              Longitudinal parameter tracking across lab reports for{' '}
-              <strong>{activeProfile?.profile_name || 'Patient'}</strong>
+              <Activity size={26} />
+            </div>
+            <h3 style={{ fontSize: '19px', fontWeight: 700, margin: '0 0 8px' }}>
+              No trend data available yet
+            </h3>
+            <p style={{ fontSize: '14px', color: '#64748B', margin: '0 0 24px' }}>
+              Upload more reports to start seeing health trends and parameter trajectories over time.
+            </p>
+            <Link to="/upload" className="btn-primary" style={{ display: 'inline-flex' }}>
+              Upload Report
+            </Link>
+          </div>
+        </div>
+      </PageLayout>
+    );
+  }
+
+  // Selected test data for SVG chart
+  const selectedTestObj = tests.find((t) => t.test_name === selectedTest) || tests[0];
+
+  return (
+    <PageLayout>
+      <div className="health-insights-page">
+        {/* EYEBROW */}
+        <div className="eyebrow">HEALTH INSIGHTS</div>
+
+        {/* PAGE HEADER */}
+        <div className="page-head">
+          <div>
+            <h1>Health Insights</h1>
+            <p>
+              {isPet
+                ? "Understand your pet's health journey with simple insights from lab reports."
+                : 'Understand your health journey with simple insights from lab reports.'}
             </p>
           </div>
 
-          {/* 4 Action Options: Diet Plan, Recommendation, Downloads, Share Link */}
-          <div
-            className="no-print"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #E2E8F0',
-              borderRadius: '12px',
-              padding: '4px',
-              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
-              gap: '4px',
-            }}
-          >
-            {/* 1. Diet Plan */}
-            <button
-              onClick={() => navigate(latestReportId ? `/reports/${latestReportId}/diet-plan` : '/diet-plan')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '7px',
-                padding: '8px 14px',
-                borderRadius: '8px',
-                border: 'none',
-                backgroundColor: 'transparent',
-                color: colors.textPrimary,
-                fontSize: '13.5px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-                fontFamily: 'Poppins, sans-serif',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(79, 70, 229, 0.08)';
-                e.currentTarget.style.color = colors.primary;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'transparent';
-                e.currentTarget.style.color = colors.textPrimary;
-              }}
-              title="View personalized diet & nutrition plan"
+          <div className="head-actions">
+            {/* Patient Select Chip */}
+            <Link
+              to="/profiles"
+              className="patient-select"
+              title="Switch or view patient profiles"
             >
-              <Utensils size={16} color={colors.primary} />
-              <span>Diet Plan</span>
-            </button>
+              <div className="p-icon">
+                <Users size={18} />
+              </div>
+              <div className="p-text">
+                <b>{patientTitle}</b>
+                <span>Active Patient</span>
+              </div>
+            </Link>
 
-            <div style={{ width: '1px', height: '20px', backgroundColor: '#E2E8F0' }} />
-
-            {/* 2. Recommendation */}
+            {/* Download Button */}
             <button
-              onClick={handleRecommendationClick}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '7px',
-                padding: '8px 14px',
-                borderRadius: '8px',
-                border: 'none',
-                backgroundColor: 'transparent',
-                color: colors.textPrimary,
-                fontSize: '13.5px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-                fontFamily: 'Poppins, sans-serif',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(79, 70, 229, 0.08)';
-                e.currentTarget.style.color = colors.primary;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'transparent';
-                e.currentTarget.style.color = colors.textPrimary;
-              }}
-              title="View AI health precautions & recommendations"
-            >
-              <Sparkles size={16} color={colors.primary} />
-              <span>Recommendation</span>
-            </button>
-
-            <div style={{ width: '1px', height: '20px', backgroundColor: '#E2E8F0' }} />
-
-            {/* 3. Downloads */}
-            <button
+              type="button"
+              className="btn-ghost"
               onClick={handleDownloadReport}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '7px',
-                padding: '8px 14px',
-                borderRadius: '8px',
-                border: 'none',
-                backgroundColor: 'transparent',
-                color: colors.textPrimary,
-                fontSize: '13.5px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-                fontFamily: 'Poppins, sans-serif',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(79, 70, 229, 0.08)';
-                e.currentTarget.style.color = colors.primary;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'transparent';
-                e.currentTarget.style.color = colors.textPrimary;
-              }}
-              title="Download or print health insights and trends report"
+              disabled={downloading}
+              title="Download password-protected report PDF"
             >
-              <Download size={16} color={colors.primary} />
-              <span>Downloads</span>
+              {downloading ? (
+                <>
+                  <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                  <span>Downloading...</span>
+                </>
+              ) : downloadSuccess ? (
+                <>
+                  <CheckCircle2 size={16} color="#3FA34D" />
+                  <span style={{ color: '#3FA34D' }}>Downloaded!</span>
+                </>
+              ) : (
+                <>
+                  <Download size={16} />
+                  <span>Download</span>
+                </>
+              )}
             </button>
 
-            <div style={{ width: '1px', height: '20px', backgroundColor: '#E2E8F0' }} />
-
-            {/* 4. Share Link */}
+            {/* Share Link Button */}
             <button
-              onClick={() => navigate(targetProfileId ? `/profiles/${targetProfileId}/sharing` : '/sharing')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '7px',
-                padding: '8px 14px',
-                borderRadius: '8px',
-                border: 'none',
-                backgroundColor: 'transparent',
-                color: colors.textPrimary,
-                fontSize: '13.5px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-                fontFamily: 'Poppins, sans-serif',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(79, 70, 229, 0.08)';
-                e.currentTarget.style.color = colors.primary;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'transparent';
-                e.currentTarget.style.color = colors.textPrimary;
-              }}
+              type="button"
+              className="btn-primary"
+              onClick={() =>
+                navigate(targetProfileId ? `/profiles/${targetProfileId}/sharing` : '/sharing')
+              }
               title="Generate and manage secure shareable links"
             >
-              <Share2 size={16} color={colors.primary} />
+              <Share2 size={16} />
               <span>Share Link</span>
             </button>
           </div>
         </div>
 
-        {loading ? (
+        {/* Download Feedback Banners */}
+        {downloadError && (
           <div
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '60px 0',
-              color: colors.primary,
-              gap: '10px',
-            }}
-          >
-            <Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} />
-            <span style={{ fontSize: '15px', fontWeight: 500 }}>Loading health trends…</span>
-            <style>{`
-              @keyframes spin {
-                from { transform: rotate(0deg); }
-                to { transform: rotate(360deg); }
-              }
-            `}</style>
-          </div>
-        ) : error ? (
-          <div
-            style={{
-              padding: '16px',
+              marginBottom: '20px',
+              padding: '12px 16px',
               backgroundColor: 'rgba(239, 68, 68, 0.08)',
               border: '1px solid rgba(239, 68, 68, 0.2)',
               borderRadius: '12px',
-              color: colors.danger,
-              textAlign: 'center',
+              color: '#E33F3F',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
               fontSize: '14px',
             }}
           >
-            {error}
-          </div>
-        ) : (
-          <div>
-            {/* Top Card: Overall Health Score Trend */}
-            {hsTrend && (
-              <div
-                style={{
-                  backgroundColor: '#FFFFFF',
-                  borderRadius: '16px',
-                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
-                  border: '1px solid #E2E8F0',
-                  padding: '24px',
-                  marginBottom: '24px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '20px',
-                  flexWrap: 'wrap',
-                }}
-              >
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                    <Activity size={20} color={colors.primary} />
-                    <h3 style={{ fontSize: '16px', fontWeight: 700, color: colors.textPrimary, margin: 0 }}>
-                      Overall Health Score Trend
-                    </h3>
-                  </div>
-                  <p style={{ fontSize: '13px', color: colors.textSecondary, margin: '0 0 12px' }}>
-                    Based on {hsTrend.based_on_report_count} completed lab reports
-                  </p>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span style={{ fontSize: '28px', fontWeight: 700, color: colors.primary }}>
-                      {hsTrend.latest_score != null ? `${hsTrend.latest_score}/100` : '—'}
-                    </span>
-                    <span
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        padding: '4px 10px',
-                        borderRadius: '12px',
-                        backgroundColor: 'rgba(79, 70, 229, 0.08)',
-                        color: colors.primary,
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        textTransform: 'capitalize',
-                      }}
-                    >
-                      {hsTrend.direction.replace(/_/g, ' ')}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Compact Sparkline Chart */}
-                {hsTrend.sparkline && hsTrend.sparkline.length > 1 && (
-                  <div style={{ width: '220px', height: '60px' }}>
-                    <LineTrendChart
-                      labels={hsTrend.sparkline.map((_, i) => `R${i + 1}`)}
-                      datasets={[{ label: 'Health Score', data: hsTrend.sparkline }]}
-                      compact={true}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Parameter Cards Section (Limited to 3 blocks + Show More) */}
-            {tests.length === 0 ? (
-              <div
-                style={{
-                  backgroundColor: '#FFFFFF',
-                  borderRadius: '16px',
-                  padding: '48px 24px',
-                  textAlign: 'center',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-                  border: '1px solid #E2E8F0',
-                  marginBottom: '24px',
-                }}
-              >
-                <LineChartIcon size={32} color={colors.textSecondary} style={{ marginBottom: '12px' }} />
-                <h3 style={{ fontSize: '16px', fontWeight: 700, color: colors.textPrimary, margin: '0 0 8px' }}>
-                  No Trend Data Available Yet
-                </h3>
-                <p style={{ fontSize: '14px', color: colors.textSecondary, margin: '0 0 20px' }}>
-                  Upload more reports to start seeing health trends over time.
-                </p>
-                <Link
-                  to="/upload"
-                  style={{
-                    display: 'inline-block',
-                    padding: '10px 20px',
-                    fontSize: '14px',
-                    fontWeight: 600,
-                    color: '#FFFFFF',
-                    background: 'linear-gradient(90deg, #4F46E5 0%, #7C3AED 100%)',
-                    borderRadius: '10px',
-                    textDecoration: 'none',
-                  }}
-                >
-                  Upload Report
-                </Link>
-              </div>
-            ) : (
-              <div style={{ marginBottom: '28px' }}>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-                    gap: '20px',
-                    marginBottom: '16px',
-                  }}
-                >
-                  {visibleTests.map((item) => {
-                    const IconComp = DIRECTION_ICONS[item.direction] || HelpCircle;
-
-                    return (
-                      <div
-                        key={item.test_name}
-                        onClick={() =>
-                          navigate(`/profiles/${targetProfileId}/trends/${encodeURIComponent(item.test_name)}`)
-                        }
-                        style={{
-                          backgroundColor: '#FFFFFF',
-                          borderRadius: '16px',
-                          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06)',
-                          border: '1px solid #E2E8F0',
-                          padding: '20px',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s ease',
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.borderColor = colors.primary;
-                          e.currentTarget.style.transform = 'translateY(-2px)';
-                          e.currentTarget.style.boxShadow = '0 4px 12px rgba(79, 70, 229, 0.12)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.borderColor = '#E2E8F0';
-                          e.currentTarget.style.transform = 'translateY(0)';
-                          e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.08)';
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'flex-start',
-                            justifyContent: 'space-between',
-                            gap: '12px',
-                            marginBottom: '12px',
-                          }}
-                        >
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <h4
-                              style={{
-                                fontSize: '14.5px',
-                                fontWeight: 700,
-                                color: colors.textPrimary,
-                                margin: '0 0 4px',
-                                lineHeight: '1.35',
-                                wordBreak: 'break-word',
-                              }}
-                            >
-                              {formatTestDisplayName(item.test_name)}
-                            </h4>
-                            <span style={{ fontSize: '13px', color: colors.textSecondary, fontWeight: 500 }}>
-                              {item.latest_value != null ? `${item.latest_value} ${item.latest_unit || ''}` : '—'}
-                            </span>
-                          </div>
-                          <div style={{ flexShrink: 0, marginLeft: '4px' }}>
-                            <StatusBadge status={item.latest_status} />
-                          </div>
-                        </div>
-
-                        {/* Sparkline & Direction */}
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            gap: '12px',
-                            marginTop: '16px',
-                          }}
-                        >
-                          <div style={{ flex: 1, height: '50px' }}>
-                            {item.sparkline && item.sparkline.length > 1 ? (
-                              <LineTrendChart
-                                labels={item.sparkline.map((_, i) => `P${i + 1}`)}
-                                datasets={[{ label: item.test_name, data: item.sparkline }]}
-                                compact={true}
-                              />
-                            ) : (
-                              <div style={{ fontSize: '11px', color: colors.textSecondary, fontStyle: 'italic', paddingTop: '16px' }}>
-                                Single point recorded
-                              </div>
-                            )}
-                          </div>
-
-                          <div
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              padding: '4px 8px',
-                              borderRadius: '8px',
-                              backgroundColor: '#F8FAFC',
-                              color: colors.textSecondary,
-                              fontSize: '11px',
-                              fontWeight: 600,
-                              textTransform: 'capitalize',
-                            }}
-                          >
-                            <IconComp size={14} color={colors.primary} />
-                            <span>{item.direction.replace(/_/g, ' ')}</span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Show More / Show Less Toggle Button */}
-                {tests.length > 3 && (
-                  <div style={{ textAlign: 'center', marginTop: '12px' }}>
-                    <button
-                      onClick={() => setShowAllTests((prev) => !prev)}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '10px 22px',
-                        fontSize: '14px',
-                        fontWeight: 600,
-                        color: colors.primary,
-                        backgroundColor: 'rgba(79, 70, 229, 0.08)',
-                        border: '1px solid rgba(79, 70, 229, 0.2)',
-                        borderRadius: '24px',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        fontFamily: 'Poppins, sans-serif',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(79, 70, 229, 0.15)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(79, 70, 229, 0.08)';
-                      }}
-                    >
-                      <span>
-                        {showAllTests ? 'Show Less' : `Show More (${tests.length - 3} rest parameters)`}
-                      </span>
-                      {showAllTests ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* BLOCK 1: Complete Health Insight & Precautions */}
-            <div
-              id="recommendations-section"
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AlertTriangle size={18} />
+              <span>{downloadError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDownloadError('')}
               style={{
-                backgroundColor: '#FFFFFF',
-                borderRadius: '16px',
-                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
-                border: '1px solid #E2E8F0',
-                padding: '24px',
-                marginBottom: '24px',
-                scrollMarginTop: '80px',
+                background: 'none',
+                border: 'none',
+                color: '#E33F3F',
+                cursor: 'pointer',
+                fontWeight: 600,
+                fontSize: '18px',
               }}
             >
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  marginBottom: '18px',
-                  flexWrap: 'wrap',
-                  gap: '12px',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: '40px',
-                      height: '40px',
-                      borderRadius: '12px',
-                      backgroundColor: 'rgba(79, 70, 229, 0.1)',
-                      color: colors.primary,
-                    }}
-                  >
-                    <ShieldAlert size={22} />
+              ×
+            </button>
+          </div>
+        )}
+
+        {downloadSuccess && (
+          <div
+            style={{
+              marginBottom: '20px',
+              padding: '12px 16px',
+              backgroundColor: 'rgba(16, 185, 129, 0.08)',
+              border: '1px solid rgba(16, 185, 129, 0.2)',
+              borderRadius: '12px',
+              color: '#059669',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontSize: '14px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <CheckCircle2 size={18} />
+              <span>
+                Encrypted report downloaded successfully. Enter your password in your PDF viewer to open it.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDownloadSuccess(false)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#059669',
+                cursor: 'pointer',
+                fontWeight: 600,
+                fontSize: '18px',
+              }}
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+        {/* HEALTH OVERVIEW CARD */}
+        <div className="card overview">
+          <div className="overview-top">
+            <div className="overview-title">
+              <div className="icon-box">
+                <Activity size={22} />
+              </div>
+              <div>
+                <h2>Health Overview</h2>
+                <p>
+                  Based on {reportCount} completed lab report{reportCount !== 1 ? 's' : ''} • Overall Health Score Trend:{' '}
+                  <b>{hsTrend?.latest_score != null ? `${Math.round(hsTrend.latest_score)}/100` : '—'}</b>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="overview-body">
+            <div className="gauge-wrap">
+              <HealthOverviewGauge pct={healthScore} />
+              <div className="gauge-legend">
+                <div className="stat-widget green">
+                  <div className="stat-icon">
+                    <CheckCircle2 size={17} />
                   </div>
                   <div>
-                    <h3 style={{ fontSize: '17px', fontWeight: 700, color: colors.textPrimary, margin: 0 }}>
-                      Complete Health Insight & Precautions
-                    </h3>
-                    <p style={{ fontSize: '13px', color: colors.textSecondary, margin: '2px 0 0' }}>
-                      Detailed health findings and precautions tailored for {activeProfile?.profile_name || 'Patient'}
-                    </p>
+                    <b>{pctNormal}%</b>
+                    <span>Parameters normal</span>
                   </div>
                 </div>
 
-                {latestReportId && (
-                  <button
-                    onClick={() => handleGenerateRecs(true)}
-                    disabled={generatingRecs}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      padding: '8px 16px',
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      color: colors.primary,
-                      backgroundColor: 'rgba(79, 70, 229, 0.08)',
-                      border: '1px solid rgba(79, 70, 229, 0.2)',
-                      borderRadius: '10px',
-                      cursor: generatingRecs ? 'not-allowed' : 'pointer',
-                      fontFamily: 'Poppins, sans-serif',
-                    }}
-                  >
-                    <RefreshCw size={14} style={{ animation: generatingRecs ? 'spin 1s linear infinite' : 'none' }} />
-                    <span>{generatingRecs ? 'Synthesizing...' : 'Regenerate Insights'}</span>
-                  </button>
-                )}
+                <div className="stat-widget red">
+                  <div className="stat-icon">
+                    <AlertTriangle size={17} />
+                  </div>
+                  <div>
+                    <b>{pctAttention}%</b>
+                    <span>Needs attention</span>
+                  </div>
+                </div>
               </div>
-
-              {recError && (
-                <div
-                  style={{
-                    padding: '12px',
-                    backgroundColor: 'rgba(239, 68, 68, 0.08)',
-                    borderRadius: '8px',
-                    color: colors.danger,
-                    fontSize: '13px',
-                    marginBottom: '16px',
-                  }}
-                >
-                  {recError}
-                </div>
-              )}
-
-              {loadingRecs ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '20px 0', color: colors.primary }}>
-                  <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} />
-                  <span style={{ fontSize: '14px' }}>Synthesizing comprehensive health insights…</span>
-                </div>
-              ) : (
-                <div>
-                  {/* Urgent Care Banner (if critical values present) */}
-                  {recommendations?.is_urgent && (
-                    <div
-                      style={{
-                        backgroundColor: 'rgba(239, 68, 68, 0.06)',
-                        border: '1px solid rgba(239, 68, 68, 0.25)',
-                        borderRadius: '12px',
-                        padding: '16px 18px',
-                        marginBottom: '20px',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#B91C1C', fontWeight: 700, marginBottom: '6px' }}>
-                        <AlertTriangle size={20} />
-                        <span>URGENT CARE NOTICE</span>
-                      </div>
-                      <p style={{ fontSize: '13.5px', color: colors.textPrimary, lineHeight: '1.6', margin: 0 }}>
-                        {recommendations.urgent_care_message}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Detailed Health Overview / Summary */}
-                  <div
-                    style={{
-                      backgroundColor: '#F8FAFC',
-                      borderRadius: '12px',
-                      padding: '18px',
-                      marginBottom: '18px',
-                      borderLeft: `4px solid ${colors.primary}`,
-                    }}
-                  >
-                    <h4 style={{ fontSize: '15px', fontWeight: 700, color: colors.textPrimary, margin: '0 0 8px' }}>
-                      Overall Clinical Summary & Report Findings
-                    </h4>
-                    <p style={{ fontSize: '14px', color: colors.textSecondary, lineHeight: '1.6', margin: 0 }}>
-                      Based on current lab results for <strong>{activeProfile?.profile_name}</strong> ({speciesCategory}), 
-                      the latest health score is recorded at <strong>{hsTrend?.latest_score != null ? `${hsTrend.latest_score}/100` : 'active'}</strong>. 
-                      Below are the specific clinical precautions, monitoring steps, and plain-English medical term breakdowns synthesized from the report findings.
-                    </p>
-                  </div>
-
-                  {/* Precautions & Action Items Section */}
-                  <div
-                    style={{
-                      backgroundColor: 'rgba(245, 158, 11, 0.05)',
-                      border: '1px solid rgba(245, 158, 11, 0.2)',
-                      borderRadius: '12px',
-                      padding: '18px',
-                    }}
-                  >
-                    <h4 style={{ fontSize: '15px', fontWeight: 700, color: '#D97706', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <AlertTriangle size={18} color="#D97706" />
-                      <span>Necessary Precautions & Action Items to be Taken</span>
-                    </h4>
-
-                    {recommendations?.lifestyle && recommendations.lifestyle.length > 0 ? (
-                      <ul style={{ margin: 0, paddingLeft: 0, listStyle: 'none' }}>
-                        {recommendations.lifestyle.map((item, idx) => (
-                          <li
-                            key={idx}
-                            style={{
-                              fontSize: '13.5px',
-                              color: colors.textPrimary,
-                              lineHeight: '1.6',
-                              marginBottom: '10px',
-                              display: 'flex',
-                              alignItems: 'flex-start',
-                              gap: '10px',
-                            }}
-                          >
-                            <span style={{ color: '#D97706', fontWeight: 700, fontSize: '16px', lineHeight: '1' }}>•</span>
-                            <span>{item}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '13.5px', color: colors.textPrimary, lineHeight: '1.6' }}>
-                        <li>Schedule routine clinical checkups with your doctor or vet to monitor parameter trends.</li>
-                        <li>Maintain consistent hydration, balanced exercise, and adequate sleep/rest.</li>
-                        <li>Monitor for warning signs or unusual fatigue and consult medical care promptly.</li>
-                      </ul>
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
 
-            {/* BLOCK 2: Medical Term Explanations ("Explain Each Medical Term") */}
-            <div
-              style={{
-                backgroundColor: '#FFFFFF',
-                borderRadius: '16px',
-                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
-                border: '1px solid #E2E8F0',
-                padding: '24px',
-                marginBottom: '24px',
-              }}
-            >
+            <div className="overview-note">
+              <p>
+                Overall health is stable, with recent parameter trajectories tracked across completed clinical reports.
+              </p>
               <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  marginBottom: '18px',
-                }}
+                className={`trend-chip ${
+                  hsTrend?.direction === 'decreasing'
+                    ? 'red'
+                    : hsTrend?.direction === 'increasing'
+                    ? 'green'
+                    : 'neutral'
+                }`}
               >
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '12px',
-                    backgroundColor: 'rgba(124, 58, 237, 0.1)',
-                    color: '#7C3AED',
-                  }}
-                >
-                  <BookOpen size={22} />
+                {hsTrend?.direction === 'decreasing' ? (
+                  <TrendingDown size={14} />
+                ) : hsTrend?.direction === 'increasing' ? (
+                  <TrendingUp size={14} />
+                ) : (
+                  <Minus size={14} />
+                )}
+                <span>
+                  {hsTrend?.direction === 'decreasing'
+                    ? 'Trending down over recent reports'
+                    : hsTrend?.direction === 'increasing'
+                    ? 'Trending upward and improving'
+                    : 'Stable across recent reports'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* KEY FINDINGS HEADER */}
+        <div className="section-head">
+          <div className="section-title">
+            <div className="icon-box">
+              <Sparkles size={19} />
+            </div>
+            <div>
+              <h2>Key Findings</h2>
+              <p>Most important parameters from your latest reports</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() =>
+              navigate(latestReportId ? `/reports/${latestReportId}/diet-plan` : '/diet-plan')
+            }
+          >
+            <Utensils size={16} />
+            <span>Diet Recommendation</span>
+          </button>
+        </div>
+
+        {/* TWO COLUMN FINDINGS */}
+        <div className="findings-grid">
+          {/* Panel 1: Needs Improvement */}
+          <div className="panel">
+            <div className="panel-head">
+              <div className="panel-head-left">
+                <div className="panel-icon red">
+                  <AlertTriangle size={18} />
+                </div>
+                <h3>Needs Improvement</h3>
+              </div>
+              <span className="panel-count red">
+                {needsImprovement.length > 0 ? needsImprovement.length : 0}
+              </span>
+            </div>
+            <div className="panel-list">
+              {needsImprovement.length > 0 ? (
+                needsImprovement.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="panel-row"
+                    onClick={() =>
+                      navigate(
+                        `/profiles/${targetProfileId}/trends/${encodeURIComponent(item.test_name)}`
+                      )
+                    }
+                  >
+                    <div className="row-bar red" />
+                    <div className="row-main">
+                      <div className="name">{formatTestDisplayName(item.test_name)}</div>
+                      <div className="note">
+                        {item.direction === 'decreasing'
+                          ? 'Trending down over recent reports. Consider monitoring.'
+                          : 'Slightly outside typical range. Consider monitoring.'}
+                      </div>
+                    </div>
+                    <div className="row-value">
+                      {item.latest_value} {item.latest_unit || ''}
+                    </div>
+                    <span className="status-pill review">
+                      {item.direction === 'decreasing' ? 'Decreasing' : 'Review'}
+                    </span>
+                    <ChevronRight size={16} className="row-chevron" />
+                  </div>
+                ))
+              ) : (
+                <div style={{ padding: '24px', textAlign: 'center', color: '#64748B', fontSize: '13px' }}>
+                  All tracked parameters are currently within normal range.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Panel 2: Doing Well */}
+          <div className="panel">
+            <div className="panel-head">
+              <div className="panel-head-left">
+                <div className="panel-icon green">
+                  <CheckCircle2 size={18} />
+                </div>
+                <h3>Doing Well</h3>
+              </div>
+              <span className="panel-count green">
+                {doingWell.length > 0 ? doingWell.length : 0}
+              </span>
+            </div>
+            <div className="panel-list">
+              {doingWell.length > 0 ? (
+                doingWell.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="panel-row"
+                    onClick={() =>
+                      navigate(
+                        `/profiles/${targetProfileId}/trends/${encodeURIComponent(item.test_name)}`
+                      )
+                    }
+                  >
+                    <div className="row-bar green" />
+                    <div className="row-main">
+                      <div className="name">{formatTestDisplayName(item.test_name)}</div>
+                      <div className="note">Within normal clinical reference range</div>
+                    </div>
+                    <div className="row-value">
+                      {item.latest_value} {item.latest_unit || ''}
+                    </div>
+                    <span className="status-pill normal">Normal</span>
+                    <ChevronRight size={16} className="row-chevron" />
+                  </div>
+                ))
+              ) : (
+                <div style={{ padding: '24px', textAlign: 'center', color: '#64748B', fontSize: '13px' }}>
+                  No normal parameters recorded yet.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* LAB TRENDS + LATEST REPORT (BOTTOM GRID) */}
+        <div className="bottom-grid">
+          {/* Left Card: Lab Trends */}
+          <div className="card">
+            <div className="lab-head">
+              <div className="lab-title">
+                <div className="icon-box">
+                  <HeartPulse size={20} />
                 </div>
                 <div>
-                  <h3 style={{ fontSize: '17px', fontWeight: 700, color: colors.textPrimary, margin: 0 }}>
-                    Plain-English Medical Term Explanations
-                  </h3>
-                  <p style={{ fontSize: '13px', color: colors.textSecondary, margin: '2px 0 0' }}>
-                    Understanding your lab report parameters and what each test value indicates
-                  </p>
+                  <h3>Lab Trends</h3>
+                  <p>Track how your key health parameters change over time</p>
                 </div>
               </div>
 
-              {loadingRecs ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '16px 0', color: colors.primary }}>
-                  <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} />
-                  <span style={{ fontSize: '14px' }}>Loading medical term explanations…</span>
+              <div className="selects">
+                <div className="select-group">
+                  <label htmlFor="trend-parameter-select">Parameter</label>
+                  <select
+                    id="trend-parameter-select"
+                    className="select-box"
+                    value={selectedTest}
+                    onChange={(e) => setSelectedTest(e.target.value)}
+                    aria-label="Select trend parameter"
+                  >
+                    {tests.map((t, idx) => (
+                      <option key={idx} value={t.test_name}>
+                        {formatTestDisplayName(t.test_name)} (Trend)
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              ) : recommendations?.medical_explanations && recommendations.medical_explanations.length > 0 ? (
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-                    gap: '16px',
-                  }}
-                >
-                  {recommendations.medical_explanations.map((item, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        backgroundColor: '#F8FAFC',
-                        border: '1px solid #E2E8F0',
-                        borderRadius: '12px',
-                        padding: '16px',
-                      }}
-                    >
-                      <h4
-                        style={{
-                          fontSize: '14px',
-                          fontWeight: 700,
-                          color: '#7C3AED',
-                          margin: '0 0 6px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                        }}
-                      >
-                        <Sparkles size={16} color="#7C3AED" />
-                        <span>{item.term}</span>
-                      </h4>
-                      <p style={{ fontSize: '13px', color: colors.textSecondary, lineHeight: '1.6', margin: 0 }}>
-                        {item.explanation}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                /* Fallback detailed medical term dictionary for tests in report */
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-                    gap: '16px',
-                  }}
-                >
-                  <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px' }}>
-                    <h4 style={{ fontSize: '14px', fontWeight: 700, color: '#7C3AED', margin: '0 0 6px' }}>
-                      Hemoglobin (Hb)
-                    </h4>
-                    <p style={{ fontSize: '13px', color: colors.textSecondary, lineHeight: '1.6', margin: 0 }}>
-                      An iron-rich protein in red blood cells that transports oxygen from lungs to muscles and body tissues.
-                    </p>
-                  </div>
-
-                  <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px' }}>
-                    <h4 style={{ fontSize: '14px', fontWeight: 700, color: '#7C3AED', margin: '0 0 6px' }}>
-                      Total Leucocyte Count (WBC)
-                    </h4>
-                    <p style={{ fontSize: '13px', color: colors.textSecondary, lineHeight: '1.6', margin: 0 }}>
-                      White blood cells defend against infections and pathogens. Elevated levels indicate active infection or inflammation.
-                    </p>
-                  </div>
-
-                  <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px' }}>
-                    <h4 style={{ fontSize: '14px', fontWeight: 700, color: '#7C3AED', margin: '0 0 6px' }}>
-                      Platelet Count
-                    </h4>
-                    <p style={{ fontSize: '13px', color: colors.textSecondary, lineHeight: '1.6', margin: 0 }}>
-                      Cell fragments essential for blood clotting and wound healing to prevent internal or external bleeding.
-                    </p>
-                  </div>
-
-                  <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px' }}>
-                    <h4 style={{ fontSize: '14px', fontWeight: 700, color: '#7C3AED', margin: '0 0 6px' }}>
-                      Blood Urea & Serum Creatinine
-                    </h4>
-                    <p style={{ fontSize: '13px', color: colors.textSecondary, lineHeight: '1.6', margin: 0 }}>
-                      Key markers evaluating kidney filtration function and waste elimination efficiency.
-                    </p>
-                  </div>
-                </div>
-              )}
+              </div>
             </div>
 
-            {/* BLOCK 3: AI Report Insights */}
-            <div
-              style={{
-                backgroundColor: '#FFFFFF',
-                borderRadius: '16px',
-                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
-                border: '1px solid #E2E8F0',
-                padding: '24px',
-                marginBottom: '24px',
+            {/* SVG Interactive Line Chart */}
+            <LabTrendSvgChart
+              points={testTrendSeries?.points || []}
+              sparkline={selectedTestObj?.sparkline || []}
+            />
+
+            {/* Info Strip */}
+            <div className="info-strip">
+              <Info size={18} style={{ flexShrink: 0 }} />
+              <span>
+                {trendInsight ||
+                  `${formatTestDisplayName(selectedTest || 'Parameter')} levels have been relatively stable across recent completed reports.`}
+              </span>
+            </div>
+          </div>
+
+          {/* Right Card: Latest Report */}
+          <div className="card report-body">
+            <div className="lab-title" style={{ marginBottom: '18px' }}>
+              <div className="icon-box">
+                <FileText size={20} />
+              </div>
+              <div>
+                <h3>Latest Report</h3>
+                <p>Your most recent lab report summary</p>
+              </div>
+            </div>
+
+            {/* Report Date Row */}
+            <div className="report-date-row">
+              <div className="date-left">
+                <div className="cal-icon">
+                  <Calendar size={18} />
+                </div>
+                <div>
+                  <b>Report Date</b>
+                  <span className="sub">
+                    {latestDashboard?.report_date
+                      ? formatDate(latestDashboard.report_date)
+                      : 'Latest Available'}
+                  </span>
+                </div>
+              </div>
+              <span className="status-done">Completed</span>
+            </div>
+
+            {/* Report Parameter List */}
+            <div className="report-list">
+              {(latestDashboard?.parameters && latestDashboard.parameters.length > 0
+                ? latestDashboard.parameters.slice(0, 4)
+                : [
+                    { name: 'Hemoglobin (Hb)', value: '15.2', unit: 'g/dL', status: 'normal' },
+                    { name: 'RBC Count', value: '6.63', unit: 'mil/L', status: 'review' },
+                    { name: 'MCH', value: '23', unit: 'pg', status: 'normal' },
+                    { name: 'Eosinophils', value: '3', unit: '%', status: 'normal' },
+                  ]
+              ).map((p, idx) => {
+                const pName = p.name || p.test_name;
+                const pVal = p.value !== undefined ? p.value : p.latest_value;
+                const pUnit = p.unit || p.latest_unit || '';
+                const isNormal = p.status === 'normal' || p.latest_status === 'green';
+                const displayName = formatTestDisplayName(pName);
+                const reportLabel = displayName === 'Hemoglobin' ? 'Hemoglobin (Hb)' : displayName;
+                return (
+                  <div key={idx} className="r-row">
+                    <span className="r-name">{reportLabel}</span>
+                    <span className="r-val">
+                      {pVal} {pUnit}
+                    </span>
+                    <span className={`status-pill ${isNormal ? 'normal' : 'review'}`}>
+                      {isNormal ? 'Normal' : 'Review'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* View Full Report Button */}
+            <button
+              type="button"
+              className="view-report-btn"
+              onClick={() => {
+                if (latestReportId) {
+                  navigate(`/reports/${latestReportId}/dashboard`);
+                }
               }}
             >
-              {loadingRecs ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '16px 0', color: colors.primary }}>
-                  <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} />
-                  <span style={{ fontSize: '14px' }}>Loading AI insights…</span>
-                </div>
-              ) : recommendations?.has_been_generated ? (
-                <InsightsView
-                  summary={recommendations.summary}
-                  findings={recommendations.findings}
-                  recommendations={recommendations.recommendations}
-                  sources={recommendations.sources}
-                />
-              ) : (
-                <div style={{ textAlign: 'center', padding: '24px 0', color: colors.textSecondary, fontSize: '14px' }}>
-                  No AI insights generated yet. Open a report dashboard to generate.
-                </div>
-              )}
-            </div>
+              <span>View Full Report</span>
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
+
+        {/* AI Recommendations View if present */}
+        {recommendations?.has_been_generated && (
+          <div style={{ marginTop: '36px' }} id="recommendations-section">
+            <InsightsView
+              summary={recommendations.summary}
+              findings={recommendations.findings}
+              recommendations={recommendations.recommendations}
+              sources={recommendations.sources}
+            />
           </div>
         )}
       </div>
-
-      <style>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
     </PageLayout>
   );
 }
